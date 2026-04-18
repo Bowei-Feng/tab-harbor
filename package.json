@@ -1,0 +1,20 @@
+{
+  "name": "tab-harbor",
+  "version": "0.2.0",
+  "private": true,
+  "description": "A polished Edge new-tab workspace for tab triage, snapshot recovery, and lightweight project flow.",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "dev:edge": "wxt -b edge",
+    "build": "wxt build -b edge",
+    "clean": "rm -rf .output .wxt",
+    "zip": "npm run build && cd .output/edge-mv3 && rm -f ../tab-harbor-edge-mv3.zip && zip -r ../tab-harbor-edge-mv3.zip .",
+    "prepare:wxt": "wxt prepare",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "latest",
+    "wxt": "^0.20.20"
+  }
+}
