@@ -11,6 +11,7 @@ import { recentClosedRepository } from '@/lib/storage/recent-closed-repository';
 import { settingsRepository } from '@/lib/storage/settings-repository';
 import { snapshotRepository } from '@/lib/storage/snapshot-repository';
 import { tabActivityRepository } from '@/lib/storage/tab-activity-repository';
+import { getAutoSnapshotName, pickLocale } from '@/lib/i18n';
 
 function partitionDeferred(items: DeferredItem[]) {
   const visible = items.filter((item) => !item.dismissed);
@@ -56,6 +57,18 @@ export interface AppActions {
 
 export function createAppActions(store: Store<AppState>): AppActions {
   let lastAutoSnapshotSignature = '';
+
+  function t(english: string, chinese: string): string {
+    return pickLocale(store.getState().settings.language, english, chinese);
+  }
+
+  function getSelectedTabsLabel(): string {
+    return t('Selected Tabs', '已选标签页');
+  }
+
+  function getFullSweepLabel(): string {
+    return t('Full Harbor Sweep', '整仓清理');
+  }
 
   function getBaseGroupId(groupId: string): string {
     return groupId.split('__window__')[0] ?? groupId;
@@ -141,7 +154,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
         pinnedGroupIds: data.pinnedGroupIds
       },
       'auto',
-      { name: 'Auto Snapshot' }
+      { name: getAutoSnapshotName(data.settings.language) }
     ));
   }
 
@@ -159,6 +172,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
   ) {
     if (!data.tabs.length) return;
 
+    // 自动快照只在内容真正变化时才落库，避免反复打开新标签页把列表刷满。
     const signature = buildAutoSnapshotSignature(data);
     const previousAutoSnapshot = existingSnapshots.find((snapshot) => snapshot.source === 'auto');
     const previousAutoSignature = previousAutoSnapshot
@@ -170,7 +184,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
     }
     lastAutoSnapshotSignature = signature;
 
-    const snapshot = buildSnapshot(data, 'auto', { name: 'Auto Snapshot' });
+    const snapshot = buildSnapshot(data, 'auto', { name: getAutoSnapshotName(data.settings.language) });
     await snapshotRepository.save(snapshot);
     return await snapshotRepository.list();
   }
@@ -179,6 +193,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
     const currentIds = store.getState().tabs.map((tab) => tab.id);
     let createdWindowIds: number[] = [];
     try {
+      // 恢复采用“两阶段”思路：先尝试创建目标窗口并写入存储，成功后再清掉旧窗口。
       createdWindowIds = await openTabWindows(snapshot.windows);
       await Promise.all([
         settingsRepository.save(snapshot.settings),
@@ -206,7 +221,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
       ...state,
       searchQuery: '',
       selectedTabIds: [],
-      toast: `Imported snapshot: ${snapshot.name}`
+      toast: t(`Imported snapshot: ${snapshot.name}`, `已导入快照：${snapshot.name}`)
     }));
   }
 
@@ -310,6 +325,8 @@ export function createAppActions(store: Store<AppState>): AppActions {
       await refresh();
     },
     setSearchQuery(query) {
+      // 搜索输入会频繁触发，这里先做值相等短路，避免无意义刷新。
+      if (store.getState().searchQuery === query) return;
       store.setState((state) => ({ ...state, searchQuery: query }));
     },
     setSnapshotTagFilter(tag) {
@@ -389,7 +406,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
     async closeOne(tabId) {
       await closeTab(tabId);
       await refresh();
-      store.setState((state) => ({ ...state, toast: 'Tab closed' }));
+      store.setState((state) => ({ ...state, toast: t('Tab closed', '标签页已关闭') }));
     },
     async closeGroup(groupId, visibleTabIds, visibleLabel) {
       const resolved = resolveVisibleTabs(groupId, visibleTabIds);
@@ -411,7 +428,10 @@ export function createAppActions(store: Store<AppState>): AppActions {
       await refresh();
       store.setState((state) => ({
         ...state,
-        toast: `Closed ${tabs.length} tabs from ${label}`
+        toast: t(
+          `Closed ${tabs.length} tabs from ${label}`,
+          `已从“${label}”关闭 ${tabs.length} 个标签页`
+        )
       }));
     },
     async closeAll() {
@@ -421,7 +441,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
       const tabs = groups.flatMap((group) => group.tabs);
       await recentClosedRepository.push({
         id: `${Date.now()}:full-sweep`,
-        label: 'Full Harbor Sweep',
+        label: getFullSweepLabel(),
         closedAt: new Date().toISOString(),
         tabs: tabs.map((tab) => ({
           url: tab.url,
@@ -431,7 +451,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
 
       await closeTabs(tabs.map((tab) => tab.id));
       await refresh();
-      store.setState((state) => ({ ...state, toast: 'Cleared the harbor' }));
+      store.setState((state) => ({ ...state, toast: t('Cleared the harbor', '当前工作区已清空') }));
     },
     async closeDuplicates(groupId, visibleTabIds) {
       const resolved = resolveVisibleTabs(groupId, visibleTabIds);
@@ -447,7 +467,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
 
       await closeTabs(duplicateIds);
       await refresh();
-      store.setState((state) => ({ ...state, toast: 'Closed duplicates' }));
+      store.setState((state) => ({ ...state, toast: t('Closed duplicates', '重复标签已关闭') }));
     },
     async defer(tabId) {
       const tab = store.getState().tabs.find((item) => item.id === tabId);
@@ -464,7 +484,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
 
       await closeTab(tab.id);
       await refresh();
-      store.setState((state) => ({ ...state, toast: 'Moved to Later' }));
+      store.setState((state) => ({ ...state, toast: t('Moved to Later', '已移到稍后处理') }));
     },
     async closeSelected(tabIds) {
       const ids = selectExistingIds(tabIds);
@@ -473,7 +493,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
       const tabs = store.getState().tabs.filter((tab) => ids.includes(tab.id));
       await recentClosedRepository.push({
         id: `${Date.now()}:selected`,
-        label: 'Selected Tabs',
+        label: getSelectedTabsLabel(),
         closedAt: new Date().toISOString(),
         tabs: tabs.map((tab) => ({
           url: tab.url,
@@ -486,7 +506,10 @@ export function createAppActions(store: Store<AppState>): AppActions {
       store.setState((state) => ({
         ...state,
         selectedTabIds: state.selectedTabIds.filter((tabId) => !ids.includes(tabId)),
-        toast: `Closed ${ids.length} selected tabs`
+        toast: t(
+          `Closed ${ids.length} selected tabs`,
+          `已关闭 ${ids.length} 个已选标签页`
+        )
       }));
     },
     async deferSelected(tabIds) {
@@ -510,7 +533,10 @@ export function createAppActions(store: Store<AppState>): AppActions {
       store.setState((state) => ({
         ...state,
         selectedTabIds: state.selectedTabIds.filter((tabId) => !ids.includes(tabId)),
-        toast: `Moved ${ids.length} selected tabs to Later`
+        toast: t(
+          `Moved ${ids.length} selected tabs to Later`,
+          `已将 ${ids.length} 个已选标签页移到稍后处理`
+        )
       }));
     },
     async moveSelectedToNewWindow(tabIds) {
@@ -522,7 +548,10 @@ export function createAppActions(store: Store<AppState>): AppActions {
       store.setState((state) => ({
         ...state,
         selectedTabIds: state.selectedTabIds.filter((tabId) => !ids.includes(tabId)),
-        toast: `Moved ${ids.length} tabs into a new window`
+        toast: t(
+          `Moved ${ids.length} tabs into a new window`,
+          `已将 ${ids.length} 个标签页移到新窗口`
+        )
       }));
     },
     async exportWorkspaceSnapshot(metadata) {
@@ -551,7 +580,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
       store.setState((state) => ({
         ...state,
         snapshots: state.snapshots.filter((item) => item.id !== id),
-        toast: 'Snapshot removed'
+        toast: t('Snapshot removed', '快照已删除')
       }));
     },
     async updateSnapshotMetadata(id, metadata) {
@@ -569,7 +598,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
       store.setState((state) => ({
         ...state,
         snapshots: [nextSnapshot, ...state.snapshots.filter((item) => item.id !== id)].slice(0, 8),
-        toast: 'Snapshot updated'
+        toast: t('Snapshot updated', '快照已更新')
       }));
     },
     async completeDeferred(id) {
@@ -587,7 +616,10 @@ export function createAppActions(store: Store<AppState>): AppActions {
       await openTabs(item.tabs.map((tab) => tab.url));
       await recentClosedRepository.remove(id);
       await refresh();
-      store.setState((state) => ({ ...state, toast: `Restored ${item.tabs.length} tabs` }));
+      store.setState((state) => ({
+        ...state,
+        toast: t(`Restored ${item.tabs.length} tabs`, `已恢复 ${item.tabs.length} 个标签页`)
+      }));
     },
     async dismissRecent(id) {
       await recentClosedRepository.remove(id);

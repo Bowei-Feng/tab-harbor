@@ -47,6 +47,7 @@ export async function openTabs(urls: string[]): Promise<void> {
 }
 
 export async function openTabWindows(windows: SnapshotWindow[]): Promise<number[]> {
+  // 恢复快照时逐个新建窗口，再补 active/focused 状态，避免把旧会话和新会话混在一起。
   const targetWindows = windows
     .map((window) => ({
       tabs: window.tabs.filter((tab) => tab.url),
@@ -104,6 +105,7 @@ export async function closeWindows(windowIds: number[]): Promise<void> {
 export async function moveTabsToNewWindow(tabIds: number[]): Promise<void> {
   if (!tabIds.length) return;
 
+  // 先用第一项创建窗口，再把其余标签追加进去，兼容浏览器原生的窗口创建能力。
   const [firstTabId, ...restTabIds] = tabIds;
   const createdWindow = await browser.windows.create({ tabId: firstTabId });
   const windowId = createdWindow?.id;

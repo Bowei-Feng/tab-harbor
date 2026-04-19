@@ -70,6 +70,7 @@ function sortTabsWithinGroup(tabs: AppTab[]): AppTab[] {
     urlCounts.set(tab.url, (urlCounts.get(tab.url) ?? 0) + 1);
   }
 
+  // 组内排序优先把重复 URL 聚在一起，这样用户在一个堆栈里更容易先看到可清理项。
   return [...tabs].sort((a, b) => {
     const aCount = urlCounts.get(a.url) ?? 0;
     const bCount = urlCounts.get(b.url) ?? 0;
@@ -123,6 +124,7 @@ export function normalizeTab(raw: BrowserTabLike, settings: AppSettings): AppTab
 }
 
 export function groupTabs(rawTabs: BrowserTabLike[], settings: AppSettings): TabGroup[] {
+  // 分组策略分三层：先拎出 landing，再套自定义规则，最后回落到按域名分桶。
   const tabs = rawTabs
     .map((tab) => normalizeTab(tab, settings))
     .filter((tab): tab is AppTab => Boolean(tab));

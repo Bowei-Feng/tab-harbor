@@ -9,12 +9,15 @@
     "dev:edge": "wxt -b edge",
     "build": "wxt build -b edge",
     "clean": "rm -rf .output .wxt",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "zip": "npm run build && cd .output/edge-mv3 && rm -f ../tab-harbor-edge-mv3.zip && zip -r ../tab-harbor-edge-mv3.zip .",
     "prepare:wxt": "wxt prepare",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "typescript": "latest",
+    "vitest": "^4.1.4",
     "wxt": "^0.20.20"
   }
 }

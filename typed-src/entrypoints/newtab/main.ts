@@ -4,12 +4,16 @@ import { initialAppState } from '@/lib/app/state';
 import { createStore } from '@/lib/app/store';
 import { parseWorkspaceSnapshot } from '@/lib/domain/workspace-snapshot';
 import { renderNewtab, type SnapshotDialogViewModel } from '@/lib/ui/newtab-render';
+import { formatSnapshotDraftName, pickLocale } from '@/lib/i18n';
 
 const root = document.getElementById('app');
 const store = createStore(initialAppState);
 const actions = createAppActions(store);
 let draggingGroupId: string | null = null;
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
+let searchCommitTimer: ReturnType<typeof setTimeout> | null = null;
+let liveSearchQuery = store.getState().searchQuery;
+let hasRenderedOnce = false;
 let snapshotDialog: SnapshotDialogViewModel = {
   mode: 'closed',
   name: '',
@@ -18,6 +22,10 @@ let snapshotDialog: SnapshotDialogViewModel = {
   error: '',
   submitting: false
 };
+
+function t(english: string, chinese: string): string {
+  return pickLocale(store.getState().settings.language, english, chinese);
+}
 
 function parseTabIds(raw: string | undefined): number[] | undefined {
   if (!raw) return undefined;
@@ -77,9 +85,64 @@ function setToast(message: string) {
   store.setState((state) => ({ ...state, toast: message }));
 }
 
+function clearSearchCommitTimer() {
+  if (!searchCommitTimer) return;
+  clearTimeout(searchCommitTimer);
+  searchCommitTimer = null;
+}
+
+function commitSearchQuery(value: string) {
+  clearSearchCommitTimer();
+  liveSearchQuery = value;
+  const previousQuery = store.getState().searchQuery;
+  actions.setSearchQuery(value);
+  if (previousQuery === value) {
+    render();
+  }
+}
+
+function scheduleSearchQuery(value: string, immediate = false) {
+  // 搜索框输入先走本地草稿，避免每敲一个字都触发整页重建。
+  liveSearchQuery = value;
+  if (immediate) {
+    actions.setSearchQuery(value);
+    return;
+  }
+
+  clearSearchCommitTimer();
+  searchCommitTimer = setTimeout(() => {
+    searchCommitTimer = null;
+    actions.setSearchQuery(liveSearchQuery);
+  }, 110);
+}
+
 function render() {
   if (!root) return;
-  renderNewtab(root, store.getState(), snapshotDialog);
+  const currentSearchInput = document.querySelector<HTMLInputElement>('[data-role="tab-search"]');
+  const isSearchFocused = document.activeElement === currentSearchInput;
+  const selectionStart = isSearchFocused ? currentSearchInput?.selectionStart ?? null : null;
+  const selectionEnd = isSearchFocused ? currentSearchInput?.selectionEnd ?? null : null;
+  const searchDraft = isSearchFocused ? currentSearchInput?.value ?? liveSearchQuery : liveSearchQuery;
+  liveSearchQuery = searchDraft;
+
+  document.documentElement.lang = store.getState().settings.language;
+  renderNewtab(root, store.getState(), snapshotDialog, {
+    liveMode: hasRenderedOnce,
+    searchDraft
+  });
+  hasRenderedOnce = true;
+
+  const nextSearchInput = document.querySelector<HTMLInputElement>('[data-role="tab-search"]');
+  if (nextSearchInput && nextSearchInput.value !== liveSearchQuery) {
+    nextSearchInput.value = liveSearchQuery;
+  }
+
+  if (isSearchFocused && nextSearchInput) {
+    nextSearchInput.focus({ preventScroll: true });
+    if (selectionStart != null && selectionEnd != null) {
+      nextSearchInput.setSelectionRange(selectionStart, selectionEnd);
+    }
+  }
 }
 
 function closeSnapshotDialog() {
@@ -97,7 +160,7 @@ function closeSnapshotDialog() {
 function openExportSnapshotDialog() {
   snapshotDialog = {
     mode: 'export',
-    name: `Workspace ${new Date().toLocaleString()}`,
+    name: formatSnapshotDraftName(store.getState().settings.language, new Date()),
     note: '',
     tags: '',
     error: '',
@@ -176,7 +239,7 @@ document.addEventListener('input', (event) => {
   if (!target) return;
 
   if (target.matches('[data-role="tab-search"]')) {
-    actions.setSearchQuery(target.value);
+    scheduleSearchQuery(target.value);
     return;
   }
 
@@ -224,7 +287,7 @@ document.addEventListener('submit', (event) => {
           `${snapshot.name}.json`
         );
         closeSnapshotDialog();
-        setToast('Snapshot exported');
+        setToast(t('Snapshot exported', '快照已导出'));
         return;
       }
 
@@ -244,16 +307,16 @@ document.addEventListener('submit', (event) => {
         return;
       }
 
-      throw new Error('Unknown snapshot dialog action');
+      throw new Error(t('Unknown snapshot dialog action', '未知的快照操作'));
     } catch (error) {
       console.error(error);
       snapshotDialog = {
         ...snapshotDialog,
         submitting: false,
-        error: toErrorMessage(error, 'Snapshot action failed')
+        error: toErrorMessage(error, t('Snapshot action failed', '快照操作失败'))
       };
       render();
-      setToast(toErrorMessage(error, 'Snapshot action failed'));
+      setToast(toErrorMessage(error, t('Snapshot action failed', '快照操作失败')));
     }
   })();
 });
@@ -271,11 +334,11 @@ document.addEventListener('change', (event) => {
     const parsed = JSON.parse(content);
     const snapshot = parseWorkspaceSnapshot(parsed);
     if (!snapshot) {
-      throw new Error('Invalid snapshot format');
+      throw new Error(t('Invalid snapshot format', '快照文件格式不正确'));
     }
 
     await actions.importWorkspaceSnapshot(snapshot);
-  }, 'Snapshot import failed');
+  }, t('Snapshot import failed', '导入快照失败'));
 });
 
 document.addEventListener('dragstart', (event) => {
@@ -309,7 +372,7 @@ document.addEventListener('drop', (event) => {
   event.preventDefault();
   void runUiAction(
     () => actions.reorderGroups(sourceGroupId, targetGroupId),
-    'Unable to reorder stacks'
+    t('Unable to reorder stacks', '无法调整堆栈顺序')
   );
 });
 
@@ -326,18 +389,18 @@ document.addEventListener('click', (event) => {
   if (action === 'focus') {
     void runUiAction(
       () => actions.focus(Number(actionEl.dataset.tabId), Number(actionEl.dataset.windowId)),
-      'Unable to focus tab'
+      t('Unable to focus tab', '无法定位到该标签页')
     );
     return;
   }
 
   if (action === 'close-one') {
-    void runUiAction(() => actions.closeOne(Number(actionEl.dataset.tabId)), 'Unable to close tab');
+    void runUiAction(() => actions.closeOne(Number(actionEl.dataset.tabId)), t('Unable to close tab', '无法关闭该标签页'));
     return;
   }
 
   if (action === 'defer') {
-    void runUiAction(() => actions.defer(Number(actionEl.dataset.tabId)), 'Unable to move tab to Later');
+    void runUiAction(() => actions.defer(Number(actionEl.dataset.tabId)), t('Unable to move tab to Later', '无法移到稍后处理'));
     return;
   }
 
@@ -361,20 +424,20 @@ document.addEventListener('click', (event) => {
         parseTabIds(actionEl.dataset.tabIds),
         actionEl.dataset.groupLabel
       ),
-      'Unable to close stack'
+      t('Unable to close stack', '无法关闭该堆栈')
     );
     return;
   }
 
   if (action === 'close-all') {
-    void runUiAction(() => actions.closeAll(), 'Unable to close open tabs');
+    void runUiAction(() => actions.closeAll(), t('Unable to close open tabs', '无法关闭全部打开标签页'));
     return;
   }
 
   if (action === 'close-selected') {
     void runUiAction(
       () => actions.closeSelected(parseTabIds(actionEl.dataset.tabIds)),
-      'Unable to close selected tabs'
+      t('Unable to close selected tabs', '无法关闭已选标签页')
     );
     return;
   }
@@ -382,7 +445,7 @@ document.addEventListener('click', (event) => {
   if (action === 'defer-selected') {
     void runUiAction(
       () => actions.deferSelected(parseTabIds(actionEl.dataset.tabIds)),
-      'Unable to move selected tabs to Later'
+      t('Unable to move selected tabs to Later', '无法把已选标签页移到稍后处理')
     );
     return;
   }
@@ -390,7 +453,7 @@ document.addEventListener('click', (event) => {
   if (action === 'move-selected-to-new-window') {
     void runUiAction(
       () => actions.moveSelectedToNewWindow(parseTabIds(actionEl.dataset.tabIds)),
-      'Unable to move selected tabs'
+      t('Unable to move selected tabs', '无法把已选标签页移到新窗口')
     );
     return;
   }
@@ -401,33 +464,34 @@ document.addEventListener('click', (event) => {
         String(actionEl.dataset.groupId),
         parseTabIds(actionEl.dataset.tabIds)
       ),
-      'Unable to close duplicates'
+      t('Unable to close duplicates', '无法关闭重复标签')
     );
     return;
   }
 
   if (action === 'complete-deferred') {
-    void runUiAction(() => actions.completeDeferred(String(actionEl.dataset.deferredId)), 'Unable to update Later Dock');
+    void runUiAction(() => actions.completeDeferred(String(actionEl.dataset.deferredId)), t('Unable to update Later Dock', '无法更新稍后处理列表'));
     return;
   }
 
   if (action === 'dismiss-deferred') {
-    void runUiAction(() => actions.dismissDeferred(String(actionEl.dataset.deferredId)), 'Unable to dismiss item');
+    void runUiAction(() => actions.dismissDeferred(String(actionEl.dataset.deferredId)), t('Unable to dismiss item', '无法移除该条目'));
     return;
   }
 
   if (action === 'restore-recent') {
-    void runUiAction(() => actions.restoreRecent(String(actionEl.dataset.recentId)), 'Unable to restore tabs');
+    void runUiAction(() => actions.restoreRecent(String(actionEl.dataset.recentId)), t('Unable to restore tabs', '无法恢复这些标签页'));
     return;
   }
 
   if (action === 'dismiss-recent') {
-    void runUiAction(() => actions.dismissRecent(String(actionEl.dataset.recentId)), 'Unable to dismiss recent item');
+    void runUiAction(() => actions.dismissRecent(String(actionEl.dataset.recentId)), t('Unable to dismiss recent item', '无法移除最近关闭记录'));
     return;
   }
 
   if (action === 'clear-search') {
-    actions.setSearchQuery('');
+    commitSearchQuery('');
+    focusSearchInput();
     return;
   }
 
@@ -453,7 +517,7 @@ document.addEventListener('click', (event) => {
   }
 
   if (action === 'toggle-pinned-group') {
-    void runUiAction(() => actions.togglePinnedGroup(String(actionEl.dataset.groupId)), 'Unable to pin stack');
+    void runUiAction(() => actions.togglePinnedGroup(String(actionEl.dataset.groupId)), t('Unable to pin stack', '无法置顶该堆栈'));
     return;
   }
 
@@ -473,7 +537,7 @@ document.addEventListener('click', (event) => {
   }
 
   if (action === 'restore-snapshot') {
-    void runUiAction(() => actions.restoreSnapshot(String(actionEl.dataset.snapshotId)), 'Unable to restore snapshot');
+    void runUiAction(() => actions.restoreSnapshot(String(actionEl.dataset.snapshotId)), t('Unable to restore snapshot', '无法恢复该快照'));
     return;
   }
 
@@ -518,7 +582,7 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     const search = document.querySelector<HTMLInputElement>('[data-role="tab-search"]');
     if (search && search.value) {
-      actions.setSearchQuery('');
+      commitSearchQuery('');
       search.focus();
       return;
     }
@@ -551,7 +615,12 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
-store.subscribe(render);
+store.subscribe((state) => {
+  if (!searchCommitTimer) {
+    liveSearchQuery = state.searchQuery;
+  }
+  render();
+});
 store.subscribe((state) => {
   if (toastTimer) {
     clearTimeout(toastTimer);
@@ -564,4 +633,4 @@ store.subscribe((state) => {
 });
 
 render();
-void runUiAction(() => actions.initialize(), 'Unable to load current tabs');
+void runUiAction(() => actions.initialize(), t('Unable to load current tabs', '无法加载当前标签页'));

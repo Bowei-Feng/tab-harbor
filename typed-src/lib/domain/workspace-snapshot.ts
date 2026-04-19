@@ -115,6 +115,7 @@ function parseRecentClosedStack(value: unknown): RecentClosedStack | null {
 export function parseWorkspaceSnapshot(value: unknown): WorkspaceSnapshotV1 | null {
   if (!isRecord(value)) return null;
 
+  // 导入快照时做“防御性收口”：字段缺失就拒绝，能安全归一化的字段再放进系统里。
   const snapshot = value as Partial<WorkspaceSnapshotV1>;
   if (
     snapshot.version !== 1 ||
@@ -168,6 +169,7 @@ export function isWorkspaceSnapshotV1(value: unknown): value is WorkspaceSnapsho
 export function buildWorkspaceSnapshotSignature(
   snapshot: Pick<WorkspaceSnapshotV1, 'windows' | 'deferred' | 'groupOrder' | 'pinnedGroupIds'>
 ): string {
+  // 签名只保留会影响工作区结构的关键信息，用来判断自动快照是否真的发生了变化。
   return JSON.stringify({
     windows: snapshot.windows.map((window) => ({
       tabs: window.tabs.map((tab) => tab.url),

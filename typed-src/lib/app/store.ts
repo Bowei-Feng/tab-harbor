@@ -13,6 +13,7 @@ export function createStore<T>(initialState: T): Store<T> {
       return state;
     },
     setState(next) {
+      // 这里故意保持成极简 store：同步更新、同步通知，方便扩展页场景直接推导界面。
       state = typeof next === 'function' ? (next as (prev: T) => T)(state) : next;
       for (const listener of listeners) listener(state);
     },

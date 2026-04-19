@@ -5,6 +5,8 @@ export interface LandingPageRule {
   pathPrefix?: string;
 }
 
+export type AppLocale = 'en' | 'zh-CN';
+
 export interface CustomGroupRule {
   groupKey: string;
   groupLabel: string;
@@ -19,6 +21,17 @@ export interface AppSettings {
   hiddenDomains: string[];
   soundEnabled: boolean;
   confettiEnabled: boolean;
+  language: AppLocale;
+}
+
+export function normalizeLocale(value: unknown): AppLocale {
+  return value === 'zh-CN' ? 'zh-CN' : 'en';
+}
+
+function detectDefaultLocale(): AppLocale {
+  // 默认语言只用来做首次体验，后续以用户在设置页里保存的值为准。
+  if (typeof navigator === 'undefined') return 'en';
+  return navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en';
 }
 
 export const defaultSettings: AppSettings = {
@@ -26,7 +39,8 @@ export const defaultSettings: AppSettings = {
   customGroupRules: [],
   hiddenDomains: [],
   soundEnabled: true,
-  confettiEnabled: true
+  confettiEnabled: true,
+  language: detectDefaultLocale()
 };
 
 export interface SettingsRuleParseResult<T> {
@@ -167,6 +181,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
     customGroupRules: parseCustomGroupRules(value.customGroupRules).value,
     hiddenDomains: normalizeStringArray(value.hiddenDomains, true),
     soundEnabled: typeof value.soundEnabled === 'boolean' ? value.soundEnabled : defaultSettings.soundEnabled,
-    confettiEnabled: typeof value.confettiEnabled === 'boolean' ? value.confettiEnabled : defaultSettings.confettiEnabled
+    confettiEnabled: typeof value.confettiEnabled === 'boolean' ? value.confettiEnabled : defaultSettings.confettiEnabled,
+    language: normalizeLocale(value.language)
   };
 }
