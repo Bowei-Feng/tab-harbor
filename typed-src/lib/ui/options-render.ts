@@ -1,4 +1,16 @@
-import type { AppSettings } from '@/lib/domain/settings';
+export interface OptionsDraftValues {
+  soundEnabled: boolean;
+  confettiEnabled: boolean;
+  hiddenDomainsText: string;
+  customGroupRulesText: string;
+  landingPageRulesText: string;
+}
+
+export interface OptionsRenderState {
+  draft: OptionsDraftValues;
+  saved: boolean;
+  errors: string[];
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -30,7 +42,9 @@ function renderBrand(): string {
   `;
 }
 
-export function renderOptions(root: HTMLElement, settings: AppSettings, saved = false): void {
+export function renderOptions(root: HTMLElement, view: OptionsRenderState): void {
+  const { draft, saved, errors } = view;
+
   root.innerHTML = `
     <div class="options-shell">
       <header class="options-hero">
@@ -39,17 +53,25 @@ export function renderOptions(root: HTMLElement, settings: AppSettings, saved = 
         <p>Control what belongs in the harbor, what gets grouped together, and how aggressively the workspace reacts.</p>
       </header>
       <form id="settings-form" class="options-card">
+        ${errors.length ? `
+          <div class="error-card" role="alert">
+            <strong>Fix these issues before saving</strong>
+            <ul class="error-list">
+              ${errors.map((error) => `<li>${escapeHtml(error)}</li>`).join('')}
+            </ul>
+          </div>
+        ` : ''}
         <section class="options-section">
           <h2>Experience</h2>
           <p class="section-copy">Keep the workspace quiet or let it celebrate decisive cleanup.</p>
         </section>
         <label class="toggle-row">
           <span>Enable close sound</span>
-          <input type="checkbox" name="soundEnabled" ${settings.soundEnabled ? 'checked' : ''}>
+          <input type="checkbox" name="soundEnabled" ${draft.soundEnabled ? 'checked' : ''}>
         </label>
         <label class="toggle-row">
           <span>Enable confetti</span>
-          <input type="checkbox" name="confettiEnabled" ${settings.confettiEnabled ? 'checked' : ''}>
+          <input type="checkbox" name="confettiEnabled" ${draft.confettiEnabled ? 'checked' : ''}>
         </label>
         <section class="options-section">
           <h2>Filtering</h2>
@@ -57,7 +79,7 @@ export function renderOptions(root: HTMLElement, settings: AppSettings, saved = 
         </section>
         <label class="field">
           <span>Hidden domains</span>
-          <textarea name="hiddenDomains" rows="4" placeholder="chrome.com&#10;news.ycombinator.com">${escapeHtml(settings.hiddenDomains.join('\n'))}</textarea>
+          <textarea name="hiddenDomains" rows="4" placeholder="chrome.com&#10;news.ycombinator.com">${escapeHtml(draft.hiddenDomainsText)}</textarea>
         </label>
         <section class="options-section">
           <h2>Rules</h2>
@@ -65,11 +87,11 @@ export function renderOptions(root: HTMLElement, settings: AppSettings, saved = 
         </section>
         <label class="field">
           <span>Custom group rules (JSON array)</span>
-          <textarea name="customGroupRules" rows="10" placeholder='[{"groupKey":"work-docs","groupLabel":"Work Docs","hostname":"docs.google.com"}]'>${escapeHtml(JSON.stringify(settings.customGroupRules, null, 2))}</textarea>
+          <textarea name="customGroupRules" rows="10" placeholder='[{"groupKey":"work-docs","groupLabel":"Work Docs","hostname":"docs.google.com"}]'>${escapeHtml(draft.customGroupRulesText)}</textarea>
         </label>
         <label class="field">
           <span>Extra landing page rules (JSON array)</span>
-          <textarea name="landingPageRules" rows="8" placeholder='[{"hostname":"calendar.google.com","pathExact":["/calendar/u/0/r"]}]'>${escapeHtml(JSON.stringify(settings.landingPageRules, null, 2))}</textarea>
+          <textarea name="landingPageRules" rows="8" placeholder='[{"hostname":"calendar.google.com","pathExact":["/calendar/u/0/r"]}]'>${escapeHtml(draft.landingPageRulesText)}</textarea>
         </label>
         <div class="actions-bar">
           <button class="primary-btn" type="submit">Save settings</button>

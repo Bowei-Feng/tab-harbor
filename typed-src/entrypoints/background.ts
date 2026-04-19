@@ -55,11 +55,6 @@ export default defineBackground(() => {
     void tabActivityRepository.remove(tabId);
   });
   browser.tabs.onUpdated.addListener(updateBadge);
-  browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
-    if (changeInfo.status === 'complete') {
-      void tabActivityRepository.mark(tabId);
-    }
-  });
 
   void updateBadge();
   void seedActiveTabs();

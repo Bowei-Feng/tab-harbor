@@ -4,9 +4,17 @@ import { storageKeys } from '@/lib/storage/keys';
 
 export const pinnedGroupRepository: PinnedGroupRepository = {
   async list() {
-    return await getStorageValue<string[]>(storageKeys.pinnedGroups, []);
+    const stored = await getStorageValue<unknown[]>(storageKeys.pinnedGroups, []);
+    return [...new Set(
+      stored
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean)
+    )];
   },
   async save(groupIds) {
-    await setStorageValue(storageKeys.pinnedGroups, [...new Set(groupIds)]);
+    await setStorageValue(
+      storageKeys.pinnedGroups,
+      [...new Set(groupIds.map((item) => item.trim()).filter(Boolean))]
+    );
   }
 };

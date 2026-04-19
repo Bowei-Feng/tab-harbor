@@ -26,6 +26,16 @@ interface VisiblePresentation {
   visibleTabIds: number[];
 }
 
+export interface SnapshotDialogViewModel {
+  mode: 'closed' | 'export' | 'edit' | 'delete';
+  snapshotId?: string;
+  name: string;
+  note: string;
+  tags: string;
+  error: string;
+  submitting: boolean;
+}
+
 function timeAgo(dateString: string): string {
   const then = new Date(dateString);
   const diff = Date.now() - then.getTime();
@@ -182,7 +192,7 @@ function sortGroupsForDisplay(
   groupOrder: string[],
   pinnedGroupIds: string[]
 ) {
-  const baseSorted = [...groups].sort((a, b) => {
+  const pinnedSorted = [...groups].sort((a, b) => {
     const aPinned = a.pinned ? 1 : 0;
     const bPinned = b.pinned ? 1 : 0;
     if (bPinned !== aPinned) return bPinned - aPinned;
@@ -190,14 +200,25 @@ function sortGroupsForDisplay(
     const pinDiff = pinRank(a, pinnedGroupIds) - pinRank(b, pinnedGroupIds);
     if (pinDiff !== 0) return pinDiff;
 
-    const rankDiff = orderRank(a, groupOrder) - orderRank(b, groupOrder);
-    if (rankDiff !== 0) return rankDiff;
     return a.label.localeCompare(b.label);
   });
 
-  if (sortMode === 'smart') return baseSorted;
+  if (sortMode === 'smart') {
+    return pinnedSorted.sort((a, b) => {
+      const aPinned = a.pinned ? 1 : 0;
+      const bPinned = b.pinned ? 1 : 0;
+      if (bPinned !== aPinned) return bPinned - aPinned;
 
-  return baseSorted.sort((a, b) => {
+      const pinDiff = pinRank(a, pinnedGroupIds) - pinRank(b, pinnedGroupIds);
+      if (pinDiff !== 0) return pinDiff;
+
+      const rankDiff = orderRank(a, groupOrder) - orderRank(b, groupOrder);
+      if (rankDiff !== 0) return rankDiff;
+      return a.label.localeCompare(b.label);
+    });
+  }
+
+  return pinnedSorted.sort((a, b) => {
     const aPinned = a.pinned ? 1 : 0;
     const bPinned = b.pinned ? 1 : 0;
     if (bPinned !== aPinned) return bPinned - aPinned;
@@ -205,8 +226,6 @@ function sortGroupsForDisplay(
     const pinDiff = pinRank(a, pinnedGroupIds) - pinRank(b, pinnedGroupIds);
     if (pinDiff !== 0) return pinDiff;
 
-    const rankDiff = orderRank(a, groupOrder) - orderRank(b, groupOrder);
-    if (rankDiff !== 0) return rankDiff;
     const aRecent = Math.max(...a.tabs.map(recentValue), 0);
     const bRecent = Math.max(...b.tabs.map(recentValue), 0);
     if (bRecent !== aRecent) return bRecent - aRecent;
@@ -536,7 +555,7 @@ function renderSidebar(state: AppState): string {
         </div>
         <p class="empty-copy">Export your current workspace to JSON, or import one to rebuild tabs, settings, and stack priorities.</p>
         <div class="group-actions">
-          <button class="ghost-btn" data-action="export-snapshot">Export snapshot</button>
+          <button class="ghost-btn" data-action="open-export-snapshot">Export snapshot</button>
           <button class="primary-btn" data-action="import-snapshot">Import snapshot</button>
         </div>
         ${allTags.length ? `
@@ -574,9 +593,9 @@ function renderSidebar(state: AppState): string {
                   ` : ''}
                 </div>
                 <div class="row-actions">
-                  <button class="ghost-btn" data-action="edit-snapshot" data-snapshot-id="${snapshot.id}">Edit</button>
+                  <button class="ghost-btn" data-action="open-edit-snapshot" data-snapshot-id="${snapshot.id}">Edit</button>
                   <button class="ghost-btn" data-action="restore-snapshot" data-snapshot-id="${snapshot.id}">Restore</button>
-                  <button class="ghost-btn danger" data-action="delete-snapshot" data-snapshot-id="${snapshot.id}">Delete</button>
+                  <button class="ghost-btn danger" data-action="open-delete-snapshot" data-snapshot-id="${snapshot.id}">Delete</button>
                 </div>
               </div>
             `).join('')}
@@ -708,7 +727,94 @@ function renderSearchToolbar(state: AppState, groupCount: number, visibleTabCoun
   `;
 }
 
-export function renderNewtab(root: HTMLElement, state: AppState): void {
+function renderSnapshotDialog(dialog: SnapshotDialogViewModel): string {
+  if (dialog.mode === 'closed') return '';
+
+  if (dialog.mode === 'delete') {
+    return `
+      <div class="modal-scrim">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="snapshot-dialog-title">
+          <div class="modal-head">
+            <div>
+              <p class="eyebrow">Workspace Snapshot</p>
+              <h2 id="snapshot-dialog-title">Delete snapshot</h2>
+            </div>
+            <button class="ghost-btn" type="button" data-action="close-snapshot-dialog">Cancel</button>
+          </div>
+          <p class="modal-copy">Remove <strong>${escapeHtml(dialog.name)}</strong> from local snapshot storage?</p>
+          ${dialog.error ? `<p class="form-error">${escapeHtml(dialog.error)}</p>` : ''}
+          <form class="modal-form" data-role="snapshot-dialog-form" data-mode="delete" data-snapshot-id="${escapeHtml(dialog.snapshotId ?? '')}">
+            <div class="modal-actions">
+              <button class="ghost-btn" type="button" data-action="close-snapshot-dialog">Keep it</button>
+              <button class="primary-btn danger-btn" type="submit" ${dialog.submitting ? 'disabled' : ''}>${dialog.submitting ? 'Deleting…' : 'Delete snapshot'}</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+  }
+
+  const title = dialog.mode === 'edit' ? 'Edit snapshot' : 'Export snapshot';
+  const submitLabel = dialog.mode === 'edit'
+    ? (dialog.submitting ? 'Saving…' : 'Save snapshot')
+    : (dialog.submitting ? 'Exporting…' : 'Export snapshot');
+
+  return `
+    <div class="modal-scrim">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="snapshot-dialog-title">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Workspace Snapshot</p>
+            <h2 id="snapshot-dialog-title">${title}</h2>
+          </div>
+          <button class="ghost-btn" type="button" data-action="close-snapshot-dialog">Cancel</button>
+        </div>
+        <p class="modal-copy">Capture a named workspace version with tags and notes, then restore it later without touching hidden state.</p>
+        ${dialog.error ? `<p class="form-error">${escapeHtml(dialog.error)}</p>` : ''}
+        <form class="modal-form" data-role="snapshot-dialog-form" data-mode="${dialog.mode}" data-snapshot-id="${escapeHtml(dialog.snapshotId ?? '')}">
+          <label class="modal-field">
+            <span>Name</span>
+            <input
+              class="modal-input"
+              type="text"
+              name="name"
+              value="${escapeHtml(dialog.name)}"
+              data-role="snapshot-dialog-name"
+              placeholder="Workspace April review"
+            />
+          </label>
+          <label class="modal-field">
+            <span>Tags</span>
+            <input
+              class="modal-input"
+              type="text"
+              name="tags"
+              value="${escapeHtml(dialog.tags)}"
+              data-role="snapshot-dialog-tags"
+              placeholder="project-a, review, urgent"
+            />
+          </label>
+          <label class="modal-field">
+            <span>Note</span>
+            <textarea
+              class="modal-textarea"
+              name="note"
+              rows="4"
+              data-role="snapshot-dialog-note"
+              placeholder="Why this workspace matters, what changed, or what to restore first."
+            >${escapeHtml(dialog.note)}</textarea>
+          </label>
+          <div class="modal-actions">
+            <button class="ghost-btn" type="button" data-action="close-snapshot-dialog">Cancel</button>
+            <button class="primary-btn" type="submit" ${dialog.submitting ? 'disabled' : ''}>${submitLabel}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+export function renderNewtab(root: HTMLElement, state: AppState, snapshotDialog: SnapshotDialogViewModel): void {
   const visible = getVisiblePresentation(state);
   const hasQuery = Boolean(visible.query);
   const selectedTabIds = new Set(state.selectedTabIds);
@@ -735,6 +841,7 @@ export function renderNewtab(root: HTMLElement, state: AppState): void {
         </section>
         ${renderSidebar(state)}
       </main>
+      ${renderSnapshotDialog(snapshotDialog)}
       <input class="snapshot-input" type="file" accept="application/json,.json" data-role="snapshot-input" />
       <div class="toast ${state.toast ? 'visible' : ''}">${escapeHtml(state.toast)}</div>
     </div>

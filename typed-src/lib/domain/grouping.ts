@@ -115,6 +115,8 @@ export function normalizeTab(raw: BrowserTabLike, settings: AppSettings): AppTab
     active: Boolean(raw.active),
     windowId: raw.windowId,
     favIconUrl: raw.favIconUrl ?? '',
+    tabIndex: raw.tabIndex ?? 0,
+    windowFocused: raw.windowFocused === true,
     isLandingPage: matchesLandingRule(url, [...baseLandingRules, ...settings.landingPageRules]),
     lastActivatedAt: raw.lastActivatedAt
   };

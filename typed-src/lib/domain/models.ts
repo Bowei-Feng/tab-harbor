@@ -5,6 +5,8 @@ export interface BrowserTabLike {
   active?: boolean;
   windowId?: number;
   favIconUrl?: string;
+  tabIndex?: number;
+  windowFocused?: boolean;
   lastActivatedAt?: string;
 }
 
@@ -17,6 +19,8 @@ export interface AppTab {
   active: boolean;
   windowId: number;
   favIconUrl?: string;
+  tabIndex: number;
+  windowFocused: boolean;
   isLandingPage: boolean;
   lastActivatedAt?: string;
 }

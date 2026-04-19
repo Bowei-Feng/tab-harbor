@@ -30,6 +30,7 @@ body {
 }
 
 button,
+input,
 textarea {
   font: inherit;
 }
@@ -128,6 +129,32 @@ textarea {
   background: white;
   color: var(--text);
   resize: vertical;
+}
+
+textarea:focus-visible {
+  outline: 2px solid rgba(37, 87, 214, 0.3);
+  outline-offset: 2px;
+}
+
+.error-card {
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(244, 91, 105, 0.2);
+  background: rgba(244, 91, 105, 0.08);
+  color: #9c2332;
+}
+
+.error-card strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.error-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .actions-bar {

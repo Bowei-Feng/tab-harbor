@@ -1,9 +1,9 @@
 import { groupTabs, normalizeTab } from '@/lib/domain/grouping';
 import type { DeferredItem } from '@/lib/domain/models';
-import type { WorkspaceSnapshotV1 } from '@/lib/domain/workspace-snapshot';
+import { buildWorkspaceSnapshotSignature, type WorkspaceSnapshotV1 } from '@/lib/domain/workspace-snapshot';
 import type { Store } from '@/lib/app/store';
 import type { AppState } from '@/lib/app/state';
-import { listTabs, closeTab, closeTabs, focusTab, moveTabsToNewWindow, openTabWindows, openTabs } from '@/lib/platform/tabs-api';
+import { closeTab, closeTabs, closeWindows, focusTab, listTabs, moveTabsToNewWindow, openTabWindows, openTabs } from '@/lib/platform/tabs-api';
 import { deferredRepository } from '@/lib/storage/deferred-repository';
 import { groupOrderRepository } from '@/lib/storage/group-order-repository';
 import { pinnedGroupRepository } from '@/lib/storage/pinned-group-repository';
@@ -74,13 +74,30 @@ export function createAppActions(store: Store<AppState>): AppActions {
     source: WorkspaceSnapshotV1['source'],
     metadata?: { name?: string; note?: string; tags?: string[] }
   ): WorkspaceSnapshotV1 {
-    const windows = new Map<number, Array<{ url: string; title: string }>>();
-    for (const tab of data.tabs) {
-      if (!windows.has(tab.windowId)) windows.set(tab.windowId, []);
-      windows.get(tab.windowId)!.push({
+    const windows = new Map<number, { tabs: Array<{ url: string; title: string }>; activeTabIndex: number; focused: boolean }>();
+    for (const tab of [...data.tabs].sort((a, b) => {
+      if (Number(b.windowFocused) !== Number(a.windowFocused)) return Number(b.windowFocused) - Number(a.windowFocused);
+      if (a.windowId !== b.windowId) return a.windowId - b.windowId;
+      return a.tabIndex - b.tabIndex;
+    })) {
+      if (!windows.has(tab.windowId)) {
+        windows.set(tab.windowId, {
+          tabs: [],
+          activeTabIndex: 0,
+          focused: tab.windowFocused
+        });
+      }
+
+      const currentWindow = windows.get(tab.windowId)!;
+      currentWindow.focused = currentWindow.focused || tab.windowFocused;
+      currentWindow.tabs.push({
         url: tab.url,
         title: tab.cleanTitle || tab.title
       });
+
+      if (tab.active) {
+        currentWindow.activeTabIndex = currentWindow.tabs.length - 1;
+      }
     }
 
     const exportedAt = new Date().toISOString();
@@ -92,7 +109,11 @@ export function createAppActions(store: Store<AppState>): AppActions {
       note: metadata?.note?.trim() || '',
       tags: (metadata?.tags ?? []).map((tag) => tag.trim()).filter(Boolean),
       source,
-      windows: [...windows.values()].map((tabs) => ({ tabs })),
+      windows: [...windows.values()].map((window) => ({
+        tabs: window.tabs,
+        activeTabIndex: window.activeTabIndex,
+        focused: window.focused
+      })),
       deferred: [...data.deferred, ...data.archive],
       recentClosed: data.recentClosed,
       settings: data.settings,
@@ -105,15 +126,23 @@ export function createAppActions(store: Store<AppState>): AppActions {
     tabs: AppState['tabs'];
     deferred: AppState['deferred'];
     archive: AppState['archive'];
+    settings: AppState['settings'];
     pinnedGroupIds: AppState['pinnedGroupIds'];
     groupOrder: AppState['groupOrder'];
   }): string {
-    return JSON.stringify({
-      tabs: data.tabs.map((tab) => [tab.windowId, tab.url]),
-      deferred: [...data.deferred, ...data.archive].map((item) => item.url),
-      pinned: data.pinnedGroupIds,
-      order: data.groupOrder
-    });
+    return buildWorkspaceSnapshotSignature(buildSnapshot(
+      {
+        tabs: data.tabs,
+        deferred: data.deferred,
+        archive: data.archive,
+        recentClosed: [],
+        settings: data.settings,
+        groupOrder: data.groupOrder,
+        pinnedGroupIds: data.pinnedGroupIds
+      },
+      'auto',
+      { name: 'Auto Snapshot' }
+    ));
   }
 
   async function captureAutoSnapshot(
@@ -125,12 +154,20 @@ export function createAppActions(store: Store<AppState>): AppActions {
       settings: AppState['settings'];
       groupOrder: AppState['groupOrder'];
       pinnedGroupIds: AppState['pinnedGroupIds'];
-    }
+    },
+    existingSnapshots: WorkspaceSnapshotV1[]
   ) {
     if (!data.tabs.length) return;
 
     const signature = buildAutoSnapshotSignature(data);
-    if (signature === lastAutoSnapshotSignature) return;
+    const previousAutoSnapshot = existingSnapshots.find((snapshot) => snapshot.source === 'auto');
+    const previousAutoSignature = previousAutoSnapshot
+      ? buildWorkspaceSnapshotSignature(previousAutoSnapshot)
+      : '';
+    if (signature === lastAutoSnapshotSignature || signature === previousAutoSignature) {
+      lastAutoSnapshotSignature = previousAutoSignature || signature;
+      return;
+    }
     lastAutoSnapshotSignature = signature;
 
     const snapshot = buildSnapshot(data, 'auto', { name: 'Auto Snapshot' });
@@ -139,23 +176,30 @@ export function createAppActions(store: Store<AppState>): AppActions {
   }
 
   async function applySnapshot(snapshot: WorkspaceSnapshotV1) {
-    await Promise.all([
-      settingsRepository.save(snapshot.settings),
-      deferredRepository.replace(snapshot.deferred),
-      recentClosedRepository.replace(snapshot.recentClosed),
-      groupOrderRepository.save(snapshot.groupOrder),
-      pinnedGroupRepository.save(snapshot.pinnedGroupIds),
-      snapshotRepository.save(snapshot)
-    ]);
-
     const currentIds = store.getState().tabs.map((tab) => tab.id);
-    if (currentIds.length) {
-      await closeTabs(currentIds);
+    let createdWindowIds: number[] = [];
+    try {
+      createdWindowIds = await openTabWindows(snapshot.windows);
+      await Promise.all([
+        settingsRepository.save(snapshot.settings),
+        deferredRepository.replace(snapshot.deferred),
+        recentClosedRepository.replace(snapshot.recentClosed),
+        groupOrderRepository.save(snapshot.groupOrder),
+        pinnedGroupRepository.save(snapshot.pinnedGroupIds),
+        snapshotRepository.save(snapshot)
+      ]);
+    } catch (error) {
+      if (createdWindowIds.length) {
+        await closeWindows(createdWindowIds);
+      }
+      throw error;
     }
 
-    await openTabWindows(
-      snapshot.windows.map((window) => window.tabs.map((tab) => tab.url))
-    );
+    if (currentIds.length) {
+      try {
+        await closeTabs(currentIds);
+      } catch {}
+    }
 
     await refresh();
     store.setState((state) => ({
@@ -166,18 +210,16 @@ export function createAppActions(store: Store<AppState>): AppActions {
     }));
   }
 
-  async function savePrunedGroupOrder(nextGroupIds: string[]) {
-    const allowed = new Set(nextGroupIds);
-    const order = (await groupOrderRepository.list()).filter((groupId) => allowed.has(groupId));
-    await groupOrderRepository.save(order);
-    return order;
-  }
-
-  async function savePrunedPinnedGroups(nextGroupIds: string[]) {
-    const allowed = new Set(nextGroupIds);
-    const pinned = (await pinnedGroupRepository.list()).filter((groupId) => allowed.has(groupId));
-    await pinnedGroupRepository.save(pinned);
-    return pinned;
+  function mergeVisibleGroupOrder(storedOrder: string[], reorderedVisible: string[], currentVisibleGroupIds: string[]) {
+    const visibleSet = new Set(currentVisibleGroupIds);
+    let cursor = 0;
+    const merged = storedOrder.map((groupId) => (
+      visibleSet.has(groupId)
+        ? reorderedVisible[cursor++]
+        : groupId
+    ));
+    const missingVisible = reorderedVisible.filter((groupId) => !storedOrder.includes(groupId));
+    return [...new Set([...merged, ...missingVisible].filter(Boolean))];
   }
 
   function resolveGroup(groupId: string) {
@@ -209,13 +251,15 @@ export function createAppActions(store: Store<AppState>): AppActions {
   }
 
   async function refresh() {
-    const [rawTabs, settings, deferredItems, recentClosed, activityMap, snapshots] = await Promise.all([
+    const [rawTabs, settings, deferredItems, recentClosed, activityMap, snapshots, groupOrder, pinnedGroupIds] = await Promise.all([
       listTabs(),
       settingsRepository.load(),
       deferredRepository.list(),
       recentClosedRepository.list(),
       tabActivityRepository.list(),
-      snapshotRepository.list()
+      snapshotRepository.list(),
+      groupOrderRepository.list(),
+      pinnedGroupRepository.list()
     ]);
     void tabActivityRepository.prune(
       rawTabs
@@ -233,8 +277,6 @@ export function createAppActions(store: Store<AppState>): AppActions {
       .filter((tab): tab is NonNullable<typeof tab> => Boolean(tab));
 
     const groups = groupTabs(hydratedTabs, settings);
-    const groupOrder = await savePrunedGroupOrder(groups.map((group) => group.id));
-    const pinnedGroupIds = await savePrunedPinnedGroups(groups.map((group) => group.id));
     const deferredState = partitionDeferred(deferredItems);
     const autoSnapshots = await captureAutoSnapshot({
       tabs,
@@ -243,7 +285,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
       groupOrder,
       pinnedGroupIds,
       ...deferredState
-    });
+    }, snapshots);
 
     store.setState((state) => ({
       ...state,
@@ -323,18 +365,20 @@ export function createAppActions(store: Store<AppState>): AppActions {
       if (!sourceId || !targetId || sourceId === targetId) return;
 
       const currentIds = store.getState().groups.map((group) => group.id);
-      const ordered = [
-        ...store.getState().groupOrder.filter((groupId) => currentIds.includes(groupId)),
-        ...currentIds.filter((groupId) => !store.getState().groupOrder.includes(groupId))
+      const storedOrder = store.getState().groupOrder;
+      const orderedVisible = [
+        ...storedOrder.filter((groupId) => currentIds.includes(groupId)),
+        ...currentIds.filter((groupId) => !storedOrder.includes(groupId))
       ];
 
-      const sourceIndex = ordered.indexOf(sourceId);
-      const targetIndex = ordered.indexOf(targetId);
+      const sourceIndex = orderedVisible.indexOf(sourceId);
+      const targetIndex = orderedVisible.indexOf(targetId);
       if (sourceIndex === -1 || targetIndex === -1) return;
 
-      const next = [...ordered];
-      const [moved] = next.splice(sourceIndex, 1);
-      next.splice(targetIndex, 0, moved);
+      const reorderedVisible = [...orderedVisible];
+      const [moved] = reorderedVisible.splice(sourceIndex, 1);
+      reorderedVisible.splice(targetIndex, 0, moved);
+      const next = mergeVisibleGroupOrder(storedOrder, reorderedVisible, currentIds);
 
       await groupOrderRepository.save(next);
       store.setState((state) => ({ ...state, groupOrder: next }));
