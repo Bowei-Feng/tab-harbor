@@ -424,7 +424,7 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 318px;
   gap: 22px;
-  margin-top: 16px;
+  margin-top: 6px;
   align-items: start;
 }
 
@@ -461,7 +461,7 @@ button {
   top: 8px;
   z-index: 12;
   border-radius: var(--radius-xl);
-  padding: 18px;
+  padding: 14px 16px;
   animation: surface-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: 130ms;
   transition:
@@ -488,8 +488,38 @@ button {
 }
 
 .toolbar-head {
-  align-items: end;
-  margin-bottom: 14px;
+  align-items: start;
+  margin-bottom: 10px;
+}
+
+.toolbar-brand-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.toolbar-brand-block .brand-lockup {
+  gap: 10px;
+}
+
+.toolbar-brand-block .brand-mark {
+  inline-size: 34px;
+  block-size: 34px;
+}
+
+.toolbar-brand-block .eyebrow {
+  font-size: 12px;
+}
+
+.toolbar-brand-block .brand-caption {
+  font-size: 12px;
+}
+
+.toolbar-brand-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .toolbar-head-actions {
@@ -510,8 +540,8 @@ button {
 
 .toolbar-summary {
   margin: 0;
-  max-width: 42ch;
-  font-size: 13px;
+  max-width: 34ch;
+  font-size: 12.5px;
   line-height: 1.45;
   text-align: right;
 }
@@ -522,15 +552,28 @@ button {
   align-items: center;
 }
 
+.toolbar-row {
+  align-items: flex-start;
+}
+
 .toolbar-foot {
-  align-items: flex-end;
+  align-items: center;
+  gap: 10px;
 }
 
 .toolbar-foot-main {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 7px;
   min-width: 0;
+}
+
+.toolbar-utility-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .toolbar-signal-row,
@@ -580,8 +623,8 @@ button {
 .toolbar-mini-note {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12.5px;
+  line-height: 1.45;
 }
 
 .toolbar-toggle-cluster {
@@ -589,16 +632,20 @@ button {
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
+  flex: 1 1 320px;
 }
 
 .search-shell {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1 1 420px;
-  min-height: 52px;
-  min-width: min(100%, 320px);
-  padding: 0 16px;
+  flex: 0 1 560px;
+  width: min(100%, 560px);
+  max-width: 560px;
+  min-height: 48px;
+  min-width: min(100%, 280px);
+  padding: 0 14px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 999px;
   background:
@@ -721,7 +768,7 @@ button {
 .filter-copy,
 .shortcut-hint {
   margin: 0;
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 kbd {
@@ -760,15 +807,31 @@ kbd {
   will-change: transform;
 }
 
+.bulk-bar-embedded {
+  margin-top: 10px;
+  margin-bottom: 0;
+  padding: 10px 12px;
+  border-radius: 18px;
+  background: rgba(247, 250, 254, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  animation: none;
+}
+
 .bulk-bar.active {
   border-color: rgba(10, 132, 255, 0.16);
   box-shadow: 0 16px 32px rgba(10, 132, 255, 0.1);
 }
 
+.bulk-bar-embedded.active {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    0 8px 18px rgba(10, 132, 255, 0.08);
+}
+
 .bulk-copy {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -781,18 +844,18 @@ kbd {
 }
 
 .bulk-copy strong {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 670;
 }
 
 .bulk-copy span {
   color: var(--muted);
-  font-size: 13.5px;
+  font-size: 12.5px;
 }
 
 .bulk-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -1179,14 +1242,40 @@ kbd {
   color: var(--danger);
 }
 
+.toolbar-link-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.toolbar-link-btn:hover:not(:disabled) {
+  transform: none;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  text-decoration: underline;
+}
+
 .destructive-btn {
   background: rgba(239, 68, 68, 0.08);
   border-color: rgba(239, 68, 68, 0.18);
   box-shadow: none;
 }
 
+.toolbar-link-btn.destructive-btn {
+  background: transparent;
+  border-color: transparent;
+}
+
 .destructive-btn:hover {
   background: rgba(239, 68, 68, 0.14);
+}
+
+.toolbar-link-btn.destructive-btn:hover:not(:disabled) {
+  background: transparent;
 }
 
 .primary-btn:disabled,
@@ -1598,6 +1687,15 @@ kbd {
     justify-content: flex-start;
   }
 
+  .toolbar-utility-row {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .toolbar-brand-meta {
+    gap: 6px;
+  }
+
   .toolbar-summary {
     margin-top: 4px;
     text-align: left;
@@ -1625,6 +1723,7 @@ kbd {
   .toolbar-foot,
   .bulk-bar,
   .bulk-actions,
+  .toolbar-utility-row,
   .row-actions,
   .stack-actions,
   .group-actions {
@@ -1633,6 +1732,7 @@ kbd {
 
   .toolbar-toggle-cluster {
     width: 100%;
+    justify-content: flex-start;
   }
 
   .bulk-title-row,

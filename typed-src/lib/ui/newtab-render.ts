@@ -243,8 +243,8 @@ function getNewtabCopy(locale: AppState['settings']['language']): NewtabCopy {
       toolbarCopy: '先筛，再动手。下面的所有操作都会尊重你当前看到的范围。',
       scopeSummary: (hasQuery, summary) => (
         hasQuery
-          ? `当前命中 ${summary.visibleTabs} 个标签页，分布在 ${summary.visibleGroups} 个堆栈里。`
-          : `当前共有 ${summary.totalTabs} 个标签页，分布在 ${summary.totalGroups} 个堆栈里。`
+          ? '当前是检索后的聚焦视图。'
+          : '当前是完整工作区视图。'
       ),
       closeAllOpenTabs: '关闭全部打开标签页',
       searchPlaceholder: '检索标签页、域名或堆栈名称',
@@ -417,8 +417,8 @@ function getNewtabCopy(locale: AppState['settings']['language']): NewtabCopy {
     toolbarCopy: 'Search first. Every action below stays scoped to what you can see.',
     scopeSummary: (hasQuery, summary) => (
       hasQuery
-        ? `Showing ${summary.visibleTabs} matching tabs across ${summary.visibleGroups} visible stacks.`
-        : `Showing ${summary.totalTabs} open tabs across ${summary.totalGroups} stacks.`
+        ? 'Focused on the current search result.'
+        : 'Showing the full workspace.'
     ),
     closeAllOpenTabs: 'Close all open tabs',
     searchPlaceholder: 'Search tabs, domains, or stack names',
@@ -586,61 +586,6 @@ function renderPanelIcon(symbol: string, tone: 'default' | 'primary' | 'success'
   return `<span class="panel-icon ${tone !== 'default' ? `panel-icon-${tone}` : ''}" aria-hidden="true">${escapeHtml(symbol)}</span>`;
 }
 
-function renderHero(copy: NewtabCopy, locale: AppState['settings']['language'], summary: WorkspaceSummary): string {
-  const activeWindowLabel = localizeActiveWindowLabel(locale, summary.activeWindowLabel);
-  const duplicateLabel = summary.totalDuplicates
-    ? copy.duplicateChip(summary.totalDuplicates)
-    : copy.noDuplicateChip;
-
-  // 顶部区域改成“紧凑工作区栏”，核心目标是把搜索和堆栈尽量提前到首屏。
-  return `
-    <header class="hero">
-      <div class="hero-main">
-        ${renderBrand(copy)}
-      </div>
-      <div class="hero-pill-row hero-pill-row-compact">
-        <span class="hero-pill hero-pill-strong">${escapeHtml(activeWindowLabel)}</span>
-        <span class="hero-pill">${escapeHtml(copy.heroOpenNow(summary.totalTabs))}</span>
-        <span class="hero-pill">${escapeHtml(copy.stacksChip(summary.totalGroups))}</span>
-        <span class="hero-pill ${summary.totalDuplicates ? 'hero-pill-warning' : 'hero-pill-success'}">${escapeHtml(duplicateLabel)}</span>
-        <span class="hero-pill">${escapeHtml(copy.heroSnapshots(summary.snapshotCount))}</span>
-      </div>
-    </header>
-  `;
-}
-
-function renderMetricStrip(copy: NewtabCopy, summary: WorkspaceSummary): string {
-  const metrics = [
-    {
-      label: copy.metricWorkspaceNow,
-      value: summary.visibleTabs,
-      note: copy.metricWorkspaceNote(summary)
-    },
-    {
-      label: copy.metricCleanupRisk,
-      value: summary.visibleDuplicates,
-      note: copy.metricCleanupNote(summary.visibleDuplicates)
-    },
-    {
-      label: summary.selectedTabs ? copy.metricSelection : copy.metricRecovery,
-      value: summary.selectedTabs || summary.snapshotCount,
-      note: summary.selectedTabs ? copy.metricSelectionNote : copy.metricRecoveryNote(summary)
-    }
-  ];
-
-  return `
-    <section class="metric-strip" aria-label="Workspace metrics">
-      ${metrics.map((metric) => `
-        <article class="metric-card">
-          <span class="metric-label">${escapeHtml(metric.label)}</span>
-          <strong>${metric.value}</strong>
-          <span class="metric-note">${escapeHtml(metric.note)}</span>
-        </article>
-      `).join('')}
-    </section>
-  `;
-}
-
 function renderStatusChip(label: string, tone: 'default' | 'primary' | 'success' | 'warning' = 'default'): string {
   return `<span class="status-chip ${tone !== 'default' ? `status-chip-${tone}` : ''}">${escapeHtml(label)}</span>`;
 }
@@ -648,14 +593,10 @@ function renderStatusChip(label: string, tone: 'default' | 'primary' | 'success'
 function renderToolbarSignals(copy: NewtabCopy, state: AppState, summary: WorkspaceSummary): string {
   const searchQuery = state.searchQuery.trim();
   const chips = [
-    searchQuery ? renderStatusChip(copy.searchChip(searchQuery), 'primary') : renderStatusChip(copy.fullWorkspace),
-    renderStatusChip(copy.tabsChip(summary.visibleTabs)),
-    renderStatusChip(copy.stacksChip(summary.visibleGroups)),
-    summary.visibleDuplicates
-      ? renderStatusChip(copy.duplicateChip(summary.visibleDuplicates), 'warning')
-      : renderStatusChip(copy.noDuplicateChip, 'success')
+    searchQuery ? renderStatusChip(copy.searchChip(searchQuery), 'primary') : renderStatusChip(copy.fullWorkspace)
   ];
 
+  if (state.duplicatesOnly) chips.push(renderStatusChip(copy.duplicatesOnly, 'warning'));
   if (state.layoutMode === 'windows') chips.push(renderStatusChip(copy.byWindowChip));
   if (state.sortMode === 'recent') chips.push(renderStatusChip(copy.recentOrderChip));
   if (state.selectedTabIds.length) chips.push(renderStatusChip(copy.selectedChip(state.selectedTabIds.length), 'primary'));
@@ -668,22 +609,29 @@ function renderSearchToolbar(
   state: AppState,
   summary: WorkspaceSummary,
   canCloseAll: boolean,
-  searchValue: string
+  searchValue: string,
+  visibleTabIds: number[]
 ): string {
   const hasQuery = Boolean(searchValue.trim());
+  const activeWindowLabel = localizeActiveWindowLabel(state.settings.language, summary.activeWindowLabel);
+  const visibleSelection = state.selectedTabIds.filter((tabId) => visibleTabIds.includes(tabId));
+  const hasSelection = visibleSelection.length > 0;
+  const allVisibleSelected = visibleTabIds.length > 0 && visibleSelection.length === visibleTabIds.length;
+  const hiddenSelectionCount = Math.max(0, state.selectedTabIds.length - visibleSelection.length);
 
   return `
     <div class="toolbar-card">
       <div class="toolbar-head">
-        <div>
-          <p class="section-kicker">${escapeHtml(copy.focusedWorkspace)}</p>
-          <h2>${escapeHtml(copy.openStacks)}</h2>
+        <div class="toolbar-brand-block">
+          ${renderBrand(copy)}
+          <div class="toolbar-brand-meta">
+            ${renderStatusChip(activeWindowLabel, 'primary')}
+            ${renderStatusChip(copy.heroOpenNow(summary.totalTabs))}
+            ${renderStatusChip(copy.heroSnapshots(summary.snapshotCount))}
+          </div>
         </div>
         <div class="toolbar-head-actions">
           <p class="toolbar-summary">${escapeHtml(copy.scopeSummary(Boolean(state.searchQuery.trim()), summary))}</p>
-          <button class="ghost-btn destructive-btn" data-action="close-all"${canCloseAll ? '' : ' disabled'}>
-            ${escapeHtml(copy.closeAllOpenTabs)}
-          </button>
         </div>
       </div>
       <div class="toolbar-row">
@@ -733,7 +681,48 @@ function renderSearchToolbar(
           ${renderToolbarSignals(copy, state, summary)}
           <p class="toolbar-mini-note">${escapeHtml(hasQuery ? copy.liveSearchNote : copy.searchTip)}</p>
         </div>
-        <p class="shortcut-hint">${escapeHtml(copy.shortcutHint)}</p>
+        <div class="toolbar-utility-row">
+          <p class="shortcut-hint">${escapeHtml(copy.shortcutHint)}</p>
+          <button class="toolbar-link-btn destructive-btn" data-action="close-all"${canCloseAll ? '' : ' disabled'}>
+            ${escapeHtml(copy.closeAllOpenTabs)}
+          </button>
+        </div>
+      </div>
+      <div class="bulk-bar bulk-bar-embedded ${hasSelection ? 'active' : ''}">
+        <div class="bulk-copy">
+          <div class="bulk-title-row">
+            <strong>${escapeHtml(hasSelection ? copy.selectedSummary(visibleSelection.length) : copy.noSelectionSummary)}</strong>
+            <div class="bulk-status-row">
+              ${renderStatusChip(copy.visibleChip(visibleTabIds.length))}
+              ${renderStatusChip(hasSelection ? copy.visibleScopeOnly : copy.selectRowsHint, hasSelection ? 'primary' : 'default')}
+              ${hiddenSelectionCount ? renderStatusChip(copy.hiddenSelectionChip(hiddenSelectionCount), 'warning') : ''}
+            </div>
+          </div>
+        </div>
+        <div class="bulk-actions">
+          <button
+            class="ghost-btn"
+            type="button"
+            data-action="set-tab-selection"
+            data-tab-ids="${escapeHtml(visibleTabIds.join(','))}"
+            data-selected="${allVisibleSelected ? 'false' : 'true'}"
+            ${visibleTabIds.length ? '' : 'disabled'}
+          >
+            ${escapeHtml(allVisibleSelected ? copy.unselectVisible : copy.selectVisible)}
+          </button>
+          <button class="ghost-btn" type="button" data-action="clear-selection" ${hasSelection ? '' : 'disabled'}>
+            ${escapeHtml(copy.clear)}
+          </button>
+          <button class="ghost-btn" type="button" data-action="defer-selected" data-tab-ids="${escapeHtml(visibleSelection.join(','))}" ${hasSelection ? '' : 'disabled'}>
+            ${escapeHtml(copy.moveToLater(visibleSelection.length))}
+          </button>
+          <button class="ghost-btn" type="button" data-action="move-selected-to-new-window" data-tab-ids="${escapeHtml(visibleSelection.join(','))}" ${hasSelection ? '' : 'disabled'}>
+            ${escapeHtml(copy.newWindow(visibleSelection.length))}
+          </button>
+          <button class="primary-btn" type="button" data-action="close-selected" data-tab-ids="${escapeHtml(visibleSelection.join(','))}" ${hasSelection ? '' : 'disabled'}>
+            ${escapeHtml(copy.closeSelected(visibleSelection.length))}
+          </button>
+        </div>
       </div>
     </div>
   `;
@@ -745,53 +734,6 @@ function renderSelectionPill(copy: NewtabCopy, selected: boolean, count?: number
     <span class="selection-pill ${selected ? 'active' : ''}">
       ${escapeHtml(base)}${typeof count === 'number' ? ` · ${count}` : ''}
     </span>
-  `;
-}
-
-function renderBulkBar(copy: NewtabCopy, state: AppState, visibleTabIds: number[]): string {
-  const visibleSelection = state.selectedTabIds.filter((tabId) => visibleTabIds.includes(tabId));
-  const hasSelection = visibleSelection.length > 0;
-  const allVisibleSelected = visibleTabIds.length > 0 && visibleSelection.length === visibleTabIds.length;
-  const hiddenSelectionCount = Math.max(0, state.selectedTabIds.length - visibleSelection.length);
-
-  return `
-    <div class="bulk-bar ${hasSelection ? 'active' : ''}">
-      <div class="bulk-copy">
-        <div class="bulk-title-row">
-          <strong>${escapeHtml(hasSelection ? copy.selectedSummary(visibleSelection.length) : copy.noSelectionSummary)}</strong>
-          <div class="bulk-status-row">
-            ${renderStatusChip(copy.visibleChip(visibleTabIds.length))}
-            ${renderStatusChip(hasSelection ? copy.visibleScopeOnly : copy.selectRowsHint, hasSelection ? 'primary' : 'default')}
-            ${hiddenSelectionCount ? renderStatusChip(copy.hiddenSelectionChip(hiddenSelectionCount), 'warning') : ''}
-          </div>
-        </div>
-        <span>${escapeHtml(hasSelection ? copy.selectedCopy : copy.emptySelectionCopy)}</span>
-      </div>
-      <div class="bulk-actions">
-        <button
-          class="ghost-btn"
-          type="button"
-          data-action="set-tab-selection"
-          data-tab-ids="${escapeHtml(visibleTabIds.join(','))}"
-          data-selected="${allVisibleSelected ? 'false' : 'true'}"
-          ${visibleTabIds.length ? '' : 'disabled'}
-        >
-          ${escapeHtml(allVisibleSelected ? copy.unselectVisible : copy.selectVisible)}
-        </button>
-        <button class="ghost-btn" type="button" data-action="clear-selection" ${hasSelection ? '' : 'disabled'}>
-          ${escapeHtml(copy.clear)}
-        </button>
-        <button class="ghost-btn" type="button" data-action="defer-selected" data-tab-ids="${escapeHtml(visibleSelection.join(','))}" ${hasSelection ? '' : 'disabled'}>
-          ${escapeHtml(copy.moveToLater(visibleSelection.length))}
-        </button>
-        <button class="ghost-btn" type="button" data-action="move-selected-to-new-window" data-tab-ids="${escapeHtml(visibleSelection.join(','))}" ${hasSelection ? '' : 'disabled'}>
-          ${escapeHtml(copy.newWindow(visibleSelection.length))}
-        </button>
-        <button class="primary-btn" type="button" data-action="close-selected" data-tab-ids="${escapeHtml(visibleSelection.join(','))}" ${hasSelection ? '' : 'disabled'}>
-          ${escapeHtml(copy.closeSelected(visibleSelection.length))}
-        </button>
-      </div>
-    </div>
   `;
 }
 
@@ -1211,11 +1153,9 @@ export function renderNewtab(
   // 搜索框显示值允许先走“本地草稿”，这样在输入阶段不会被 store 的节奏强行覆盖。
   root.innerHTML = `
     <div class="shell ${options.liveMode ? 'is-live' : ''}">
-      ${renderHero(copy, locale, summary)}
       <main class="workspace-layout">
         <section class="board">
-          ${renderSearchToolbar(copy, state, summary, visible.groups.length > 0, searchValue)}
-          ${renderBulkBar(copy, state, visible.visibleTabIds)}
+          ${renderSearchToolbar(copy, state, summary, visible.groups.length > 0, searchValue, visible.visibleTabIds)}
           ${visible.groups.length
             ? renderSections(copy, visible.sections, visible.query, state.layoutMode, selectedTabIds)
             : hasQuery || state.duplicatesOnly
