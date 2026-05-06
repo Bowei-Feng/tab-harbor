@@ -181,3 +181,22 @@ export function buildWorkspaceSnapshotSignature(
     pinnedGroupIds: snapshot.pinnedGroupIds
   });
 }
+
+export function buildWorkspaceSnapshotChangeSignature(
+  snapshot: Pick<WorkspaceSnapshotV1, 'windows' | 'deferred' | 'settings' | 'groupOrder' | 'pinnedGroupIds'>
+): string {
+  // 增量快照更关心“工作区结构有没有实质变化”，不关心当前激活页或窗口焦点这种高频抖动。
+  return JSON.stringify({
+    windows: snapshot.windows.map((window) => ({
+      tabs: window.tabs.map((tab) => tab.url)
+    })),
+    deferred: snapshot.deferred.map((item) => ({
+      url: item.url,
+      completed: item.completed === true,
+      dismissed: item.dismissed === true
+    })),
+    settings: snapshot.settings,
+    groupOrder: snapshot.groupOrder,
+    pinnedGroupIds: snapshot.pinnedGroupIds
+  });
+}

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildWorkspaceSnapshotSignature, parseWorkspaceSnapshot } from '@/lib/domain/workspace-snapshot';
+import {
+  buildWorkspaceSnapshotChangeSignature,
+  buildWorkspaceSnapshotSignature,
+  parseWorkspaceSnapshot
+} from '@/lib/domain/workspace-snapshot';
 
 describe('workspace snapshots', () => {
   it('normalizes valid snapshots and filters malformed nested items', () => {
@@ -102,5 +106,55 @@ describe('workspace snapshots', () => {
     expect(snapshot).not.toBeNull();
     expect(buildWorkspaceSnapshotSignature(snapshot!)).toContain('"focused":true');
     expect(buildWorkspaceSnapshotSignature(snapshot!)).toContain('"https://github.com"');
+  });
+
+  it('ignores active tab jitter when building auto snapshot change signatures', () => {
+    const left = parseWorkspaceSnapshot({
+      version: 1,
+      exportedAt: '2026-04-19T08:30:00.000Z',
+      name: 'Snapshot A',
+      note: '',
+      tags: [],
+      source: 'auto',
+      windows: [{ tabs: [{ url: 'https://github.com', title: 'GitHub' }], activeTabIndex: 0, focused: true }],
+      deferred: [],
+      recentClosed: [],
+      settings: {
+        hiddenDomains: [],
+        customGroupRules: [],
+        landingPageRules: [],
+        soundEnabled: true,
+        confettiEnabled: true,
+        language: 'zh-CN'
+      },
+      groupOrder: ['domain:github.com'],
+      pinnedGroupIds: ['domain:github.com']
+    });
+
+    const right = parseWorkspaceSnapshot({
+      version: 1,
+      exportedAt: '2026-04-19T08:31:00.000Z',
+      name: 'Snapshot B',
+      note: '',
+      tags: [],
+      source: 'auto',
+      windows: [{ tabs: [{ url: 'https://github.com', title: 'GitHub' }], activeTabIndex: 4, focused: false }],
+      deferred: [],
+      recentClosed: [],
+      settings: {
+        hiddenDomains: [],
+        customGroupRules: [],
+        landingPageRules: [],
+        soundEnabled: true,
+        confettiEnabled: true,
+        language: 'zh-CN'
+      },
+      groupOrder: ['domain:github.com'],
+      pinnedGroupIds: ['domain:github.com']
+    });
+
+    expect(left).not.toBeNull();
+    expect(right).not.toBeNull();
+    expect(buildWorkspaceSnapshotChangeSignature(left!)).toEqual(buildWorkspaceSnapshotChangeSignature(right!));
   });
 });

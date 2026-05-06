@@ -1,6 +1,6 @@
 import { groupTabs, normalizeTab } from '@/lib/domain/grouping';
 import type { DeferredItem } from '@/lib/domain/models';
-import { buildWorkspaceSnapshotSignature, type WorkspaceSnapshotV1 } from '@/lib/domain/workspace-snapshot';
+import { buildWorkspaceSnapshotChangeSignature, buildWorkspaceSnapshotSignature, type WorkspaceSnapshotV1 } from '@/lib/domain/workspace-snapshot';
 import type { Store } from '@/lib/app/store';
 import type { AppState } from '@/lib/app/state';
 import { closeTab, closeTabs, closeWindows, focusTab, listTabs, moveTabsToNewWindow, openTabWindows, openTabs } from '@/lib/platform/tabs-api';
@@ -143,7 +143,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
     pinnedGroupIds: AppState['pinnedGroupIds'];
     groupOrder: AppState['groupOrder'];
   }): string {
-    return buildWorkspaceSnapshotSignature(buildSnapshot(
+    return buildWorkspaceSnapshotChangeSignature(buildSnapshot(
       {
         tabs: data.tabs,
         deferred: data.deferred,
@@ -176,7 +176,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
     const signature = buildAutoSnapshotSignature(data);
     const previousAutoSnapshot = existingSnapshots.find((snapshot) => snapshot.source === 'auto');
     const previousAutoSignature = previousAutoSnapshot
-      ? buildWorkspaceSnapshotSignature(previousAutoSnapshot)
+      ? buildWorkspaceSnapshotChangeSignature(previousAutoSnapshot)
       : '';
     if (signature === lastAutoSnapshotSignature || signature === previousAutoSignature) {
       lastAutoSnapshotSignature = previousAutoSignature || signature;
