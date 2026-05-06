@@ -102,6 +102,7 @@ interface NewtabCopy {
   activeTab: string;
   later: string;
   close: string;
+  rename: string;
   stackTabs(count: number): string;
   duplicatesBadge(count: number): string;
   cleanBadge: string;
@@ -134,6 +135,11 @@ interface NewtabCopy {
   guideClearSteps: Array<{ title: string; copy: string }>;
   snapshotsTitle: string;
   snapshotsIntro: string;
+  systemTitle: string;
+  systemIntro: string;
+  openSettings: string;
+  refreshBoard: string;
+  resetView: string;
   exportSnapshot: string;
   importSnapshot: string;
   all: string;
@@ -284,6 +290,7 @@ function getNewtabCopy(locale: AppState['settings']['language']): NewtabCopy {
       activeTab: '当前活跃',
       later: '稍后',
       close: '关闭',
+      rename: '重命名',
       stackTabs: (count) => `${count} 个标签页`,
       duplicatesBadge: (count) => `${count} 个重复项`,
       cleanBadge: '已清爽',
@@ -332,6 +339,11 @@ function getNewtabCopy(locale: AppState['settings']['language']): NewtabCopy {
       ],
       snapshotsTitle: '工作区快照',
       snapshotsIntro: '大动作前先存一份工作区版本，需要时可以把标签页、设置和分组优先级一并恢复回来。',
+      systemTitle: '系统入口',
+      systemIntro: '设置、刷新和视图重置放在这里。',
+      openSettings: '设置',
+      refreshBoard: '刷新面板',
+      resetView: '重置视图',
       exportSnapshot: '导出快照',
       importSnapshot: '导入快照',
       all: '全部',
@@ -458,6 +470,7 @@ function getNewtabCopy(locale: AppState['settings']['language']): NewtabCopy {
     activeTab: 'Active',
     later: 'Later',
     close: 'Close',
+    rename: 'Rename',
     stackTabs: (count) => `${count} tabs`,
     duplicatesBadge: (count) => `${count} duplicates`,
     cleanBadge: 'Clean',
@@ -506,6 +519,11 @@ function getNewtabCopy(locale: AppState['settings']['language']): NewtabCopy {
     ],
     snapshotsTitle: 'Workspace snapshots',
     snapshotsIntro: 'Save a recoverable workspace version before bulk cleanup, or import one to rebuild tabs and priorities.',
+    systemTitle: 'System',
+    systemIntro: 'Keep core controls in one place before you move into snapshots and history.',
+    openSettings: 'Settings',
+    refreshBoard: 'Refresh',
+    resetView: 'Reset view',
     exportSnapshot: 'Export snapshot',
     importSnapshot: 'Import snapshot',
     all: 'All',
@@ -551,7 +569,7 @@ function getNewtabCopy(locale: AppState['settings']['language']): NewtabCopy {
   };
 }
 
-function renderBrand(copy: NewtabCopy): string {
+function renderBrand(): string {
   return `
     <div class="brand-row">
       <span class="brand-mark" aria-hidden="true">
@@ -570,16 +588,9 @@ function renderBrand(copy: NewtabCopy): string {
       </span>
       <div>
         <p class="eyebrow">Tab Harbor</p>
-        <p class="brand-caption">${escapeHtml(copy.brandCaption)}</p>
       </div>
     </div>
   `;
-}
-
-function localizeActiveWindowLabel(locale: AppState['settings']['language'], label: string): string {
-  if (locale !== 'zh-CN') return label;
-  if (label === 'No active tab') return '当前没有活跃标签页';
-  return label.replace(/^Window\s+/i, '窗口 ');
 }
 
 function renderPanelIcon(symbol: string, tone: 'default' | 'primary' | 'success' | 'warning' = 'default'): string {
@@ -590,18 +601,16 @@ function renderStatusChip(label: string, tone: 'default' | 'primary' | 'success'
   return `<span class="status-chip ${tone !== 'default' ? `status-chip-${tone}` : ''}">${escapeHtml(label)}</span>`;
 }
 
-function renderToolbarSignals(copy: NewtabCopy, state: AppState, summary: WorkspaceSummary): string {
+function renderToolbarSignals(copy: NewtabCopy, state: AppState): string {
   const searchQuery = state.searchQuery.trim();
-  const chips = [
-    searchQuery ? renderStatusChip(copy.searchChip(searchQuery), 'primary') : renderStatusChip(copy.fullWorkspace)
-  ];
+  const chips = searchQuery ? [renderStatusChip(copy.searchChip(searchQuery), 'primary')] : [];
 
   if (state.duplicatesOnly) chips.push(renderStatusChip(copy.duplicatesOnly, 'warning'));
   if (state.layoutMode === 'windows') chips.push(renderStatusChip(copy.byWindowChip));
   if (state.sortMode === 'recent') chips.push(renderStatusChip(copy.recentOrderChip));
   if (state.selectedTabIds.length) chips.push(renderStatusChip(copy.selectedChip(state.selectedTabIds.length), 'primary'));
 
-  return `<div class="toolbar-signal-row">${chips.join('')}</div>`;
+  return chips.length ? `<div class="toolbar-signal-row">${chips.join('')}</div>` : '';
 }
 
 function renderSearchToolbar(
@@ -613,25 +622,52 @@ function renderSearchToolbar(
   visibleTabIds: number[]
 ): string {
   const hasQuery = Boolean(searchValue.trim());
-  const activeWindowLabel = localizeActiveWindowLabel(state.settings.language, summary.activeWindowLabel);
   const visibleSelection = state.selectedTabIds.filter((tabId) => visibleTabIds.includes(tabId));
   const hasSelection = visibleSelection.length > 0;
   const allVisibleSelected = visibleTabIds.length > 0 && visibleSelection.length === visibleTabIds.length;
   const hiddenSelectionCount = Math.max(0, state.selectedTabIds.length - visibleSelection.length);
+  const toolbarSignals = renderToolbarSignals(copy, state);
 
   return `
     <div class="toolbar-card">
       <div class="toolbar-head">
         <div class="toolbar-brand-block">
-          ${renderBrand(copy)}
-          <div class="toolbar-brand-meta">
-            ${renderStatusChip(activeWindowLabel, 'primary')}
-            ${renderStatusChip(copy.heroOpenNow(summary.totalTabs))}
-            ${renderStatusChip(copy.heroSnapshots(summary.snapshotCount))}
-          </div>
+          ${renderBrand()}
         </div>
-        <div class="toolbar-head-actions">
-          <p class="toolbar-summary">${escapeHtml(copy.scopeSummary(Boolean(state.searchQuery.trim()), summary))}</p>
+        <div class="toolbar-selection-panel ${hasSelection ? 'active' : ''}">
+          <div class="toolbar-selection-inline">
+            <div class="toolbar-selection-main">
+              <strong>${escapeHtml(hasSelection ? copy.selectedSummary(visibleSelection.length) : copy.noSelectionSummary)}</strong>
+              <div class="bulk-status-row">
+                ${renderStatusChip(copy.heroOpenNow(summary.totalTabs), 'primary')}
+                ${hiddenSelectionCount ? renderStatusChip(copy.hiddenSelectionChip(hiddenSelectionCount), 'warning') : ''}
+              </div>
+            </div>
+            <div class="bulk-actions">
+              <button
+                class="ghost-btn"
+                type="button"
+                data-action="set-tab-selection"
+                data-tab-ids="${escapeHtml(visibleTabIds.join(','))}"
+                data-selected="${allVisibleSelected ? 'false' : 'true'}"
+                ${visibleTabIds.length ? '' : 'disabled'}
+              >
+                ${escapeHtml(allVisibleSelected ? copy.unselectVisible : copy.selectVisible)}
+              </button>
+              <button class="ghost-btn" type="button" data-action="clear-selection" ${hasSelection ? '' : 'disabled'}>
+                ${escapeHtml(copy.clear)}
+              </button>
+              <button class="ghost-btn" type="button" data-action="defer-selected" data-tab-ids="${escapeHtml(visibleSelection.join(','))}" ${hasSelection ? '' : 'disabled'}>
+                ${escapeHtml(copy.moveToLater(visibleSelection.length))}
+              </button>
+              <button class="ghost-btn" type="button" data-action="move-selected-to-new-window" data-tab-ids="${escapeHtml(visibleSelection.join(','))}" ${hasSelection ? '' : 'disabled'}>
+                ${escapeHtml(copy.newWindow(visibleSelection.length))}
+              </button>
+              <button class="primary-btn" type="button" data-action="close-selected" data-tab-ids="${escapeHtml(visibleSelection.join(','))}" ${hasSelection ? '' : 'disabled'}>
+                ${escapeHtml(copy.closeSelected(visibleSelection.length))}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="toolbar-row">
@@ -677,50 +713,11 @@ function renderSearchToolbar(
         </div>
       </div>
       <div class="toolbar-foot">
-        <div class="toolbar-foot-main">
-          ${renderToolbarSignals(copy, state, summary)}
-          <p class="toolbar-mini-note">${escapeHtml(hasQuery ? copy.liveSearchNote : copy.searchTip)}</p>
-        </div>
+        ${toolbarSignals ? `<div class="toolbar-foot-main">${toolbarSignals}</div>` : '<div></div>'}
         <div class="toolbar-utility-row">
           <p class="shortcut-hint">${escapeHtml(copy.shortcutHint)}</p>
           <button class="toolbar-link-btn destructive-btn" data-action="close-all"${canCloseAll ? '' : ' disabled'}>
             ${escapeHtml(copy.closeAllOpenTabs)}
-          </button>
-        </div>
-      </div>
-      <div class="bulk-bar bulk-bar-embedded ${hasSelection ? 'active' : ''}">
-        <div class="bulk-copy">
-          <div class="bulk-title-row">
-            <strong>${escapeHtml(hasSelection ? copy.selectedSummary(visibleSelection.length) : copy.noSelectionSummary)}</strong>
-            <div class="bulk-status-row">
-              ${renderStatusChip(copy.visibleChip(visibleTabIds.length))}
-              ${renderStatusChip(hasSelection ? copy.visibleScopeOnly : copy.selectRowsHint, hasSelection ? 'primary' : 'default')}
-              ${hiddenSelectionCount ? renderStatusChip(copy.hiddenSelectionChip(hiddenSelectionCount), 'warning') : ''}
-            </div>
-          </div>
-        </div>
-        <div class="bulk-actions">
-          <button
-            class="ghost-btn"
-            type="button"
-            data-action="set-tab-selection"
-            data-tab-ids="${escapeHtml(visibleTabIds.join(','))}"
-            data-selected="${allVisibleSelected ? 'false' : 'true'}"
-            ${visibleTabIds.length ? '' : 'disabled'}
-          >
-            ${escapeHtml(allVisibleSelected ? copy.unselectVisible : copy.selectVisible)}
-          </button>
-          <button class="ghost-btn" type="button" data-action="clear-selection" ${hasSelection ? '' : 'disabled'}>
-            ${escapeHtml(copy.clear)}
-          </button>
-          <button class="ghost-btn" type="button" data-action="defer-selected" data-tab-ids="${escapeHtml(visibleSelection.join(','))}" ${hasSelection ? '' : 'disabled'}>
-            ${escapeHtml(copy.moveToLater(visibleSelection.length))}
-          </button>
-          <button class="ghost-btn" type="button" data-action="move-selected-to-new-window" data-tab-ids="${escapeHtml(visibleSelection.join(','))}" ${hasSelection ? '' : 'disabled'}>
-            ${escapeHtml(copy.newWindow(visibleSelection.length))}
-          </button>
-          <button class="primary-btn" type="button" data-action="close-selected" data-tab-ids="${escapeHtml(visibleSelection.join(','))}" ${hasSelection ? '' : 'disabled'}>
-            ${escapeHtml(copy.closeSelected(visibleSelection.length))}
           </button>
         </div>
       </div>
@@ -737,33 +734,11 @@ function renderSelectionPill(copy: NewtabCopy, selected: boolean, count?: number
   `;
 }
 
-function renderGroupKind(copy: NewtabCopy, group: DisplayGroup): string {
-  const label = group.kind === 'custom'
-    ? copy.kindRule
-    : group.kind === 'landing'
-      ? copy.kindLanding
-      : copy.kindDomain;
-
-  return `<span class="stack-kind kind-${group.kind}">${escapeHtml(label)}</span>`;
-}
-
-function renderMonogram(value: string): string {
-  const first = value.trim().charAt(0).toUpperCase() || '•';
-  return `<span class="site-glyph" aria-hidden="true">${escapeHtml(first)}</span>`;
+function renderTooltipPayload(urls: string[]): string {
+  return escapeHtml(urls.join(' • '));
 }
 
 function renderTabRow(copy: NewtabCopy, tab: DisplayGroup['tabs'][number], query: string, selectedTabIds: Set<number>): string {
-  // 这里把 URL 元信息压成“域名 + 路径”，目的是让长链接更容易扫描。
-  let meta = tab.url;
-  if (tab.hostname !== 'localhost') {
-    try {
-      const parsed = new URL(tab.url);
-      meta = `${tab.hostname}${parsed.pathname === '/' ? '' : parsed.pathname}`;
-    } catch {
-      meta = tab.hostname || tab.url;
-    }
-  }
-
   const title = tab.cleanTitle || tab.title || tab.url;
   const isSelected = selectedTabIds.has(tab.id);
 
@@ -785,14 +760,13 @@ function renderTabRow(copy: NewtabCopy, tab: DisplayGroup['tabs'][number], query
         data-tab-id="${tab.id}"
         data-window-id="${tab.windowId}"
         data-nav-target="tab"
+        data-url-tooltip="${escapeHtml(tab.url)}"
       >
-        ${renderMonogram(tab.hostname || title)}
         <span class="tab-copy">
           <span class="tab-title-row">
             <span class="tab-title-text">${renderHighlightedText(title, query)}</span>
             ${tab.active ? `<span class="tab-badge">${escapeHtml(copy.activeTab)}</span>` : ''}
           </span>
-          <span class="tab-meta">${renderHighlightedText(meta, query)}</span>
         </span>
       </button>
       <div class="row-actions">
@@ -820,7 +794,6 @@ function renderGroup(copy: NewtabCopy, group: DisplayGroup, query: string, selec
     >
       <div class="stack-topline">
         <div class="stack-topline-left">
-          ${renderGroupKind(copy, group)}
           <button
             class="pin-toggle ${group.pinned ? 'active' : ''}"
             type="button"
@@ -842,26 +815,49 @@ function renderGroup(copy: NewtabCopy, group: DisplayGroup, query: string, selec
           >
             ${escapeHtml(copy.reorder)}
           </button>
+          <button
+            class="group-select"
+            type="button"
+            data-action="set-tab-selection"
+            data-tab-ids="${escapeHtml(tabIdsValue)}"
+            data-selected="${allSelected ? 'false' : 'true'}"
+            aria-pressed="${allSelected ? 'true' : 'false'}"
+          >
+            ${renderSelectionPill(copy, allSelected, selectedCount)}
+          </button>
         </div>
-        <button
-          class="group-select"
-          type="button"
-          data-action="set-tab-selection"
-          data-tab-ids="${escapeHtml(tabIdsValue)}"
-          data-selected="${allSelected ? 'false' : 'true'}"
-          aria-pressed="${allSelected ? 'true' : 'false'}"
-        >
-          ${renderSelectionPill(copy, allSelected, selectedCount)}
-        </button>
+        <div class="stack-topline-actions">
+          ${group.duplicateCount ? `
+            <button class="ghost-btn stack-close-btn" data-action="close-duplicates" data-group-id="${group.id}" data-tab-ids="${escapeHtml(tabIdsValue)}">
+              ${escapeHtml(copy.closeDuplicates(group.duplicateCount))}
+            </button>
+          ` : ''}
+          <button class="ghost-btn danger stack-close-btn" data-action="close-group" data-group-id="${group.id}" data-group-label="${escapeHtml(groupLabel)}" data-tab-ids="${escapeHtml(tabIdsValue)}">
+            ${escapeHtml(copy.closeStack)}
+          </button>
+        </div>
       </div>
       <div class="stack-head">
         <div class="stack-copy">
-          <h3>${renderHighlightedText(group.label, query)}</h3>
+          <div class="stack-title-row">
+            <h3>${renderHighlightedText(group.label, query)}</h3>
+            <button
+              class="ghost-btn stack-rename-btn"
+              type="button"
+              data-action="rename-group"
+              data-group-id="${group.baseGroupId}"
+              data-group-label="${escapeHtml(group.label)}"
+            >
+              ${escapeHtml(copy.rename)}
+            </button>
+          </div>
           <div class="stack-meta-row">
             <span class="stack-meta-pill">${escapeHtml(copy.stackTabs(group.tabs.length))}</span>
-            <span class="stack-meta-pill ${group.duplicateCount ? 'stack-meta-pill-warning' : 'stack-meta-pill-success'}">
-              ${escapeHtml(group.duplicateCount ? copy.duplicatesBadge(group.duplicateCount) : copy.cleanBadge)}
-            </span>
+            ${group.duplicateCount ? `
+              <span class="stack-meta-pill stack-meta-pill-warning">
+                ${escapeHtml(copy.duplicatesBadge(group.duplicateCount))}
+              </span>
+            ` : ''}
             ${group.windowId ? `<span class="stack-meta-pill">${escapeHtml(copy.windowBadge(group.windowId))}</span>` : ''}
             ${selectedCount ? `<span class="stack-meta-pill stack-meta-pill-primary">${escapeHtml(copy.selectedBadge(selectedCount))}</span>` : ''}
           </div>
@@ -871,16 +867,6 @@ function renderGroup(copy: NewtabCopy, group: DisplayGroup, query: string, selec
         ${group.tabs.slice(0, STACK_PREVIEW_LIMIT).map((tab) => renderTabRow(copy, tab, query, selectedTabIds)).join('')}
       </ul>
       ${group.tabs.length > STACK_PREVIEW_LIMIT ? `<p class="overflow-note">${escapeHtml(copy.stackOverflow(group.tabs.length - STACK_PREVIEW_LIMIT))}</p>` : ''}
-      <div class="stack-actions">
-        <button class="primary-btn" data-action="close-group" data-group-id="${group.id}" data-group-label="${escapeHtml(groupLabel)}" data-tab-ids="${escapeHtml(tabIdsValue)}">
-          ${escapeHtml(copy.closeStack)}
-        </button>
-        ${group.duplicateCount ? `
-          <button class="ghost-btn" data-action="close-duplicates" data-group-id="${group.id}" data-tab-ids="${escapeHtml(tabIdsValue)}">
-            ${escapeHtml(copy.closeDuplicates(group.duplicateCount))}
-          </button>
-        ` : ''}
-      </div>
     </section>
   `;
 }
@@ -923,6 +909,20 @@ function renderSidebar(copy: NewtabCopy, state: AppState, summary: WorkspaceSumm
 
   return `
     <aside class="sidebar">
+      <div class="sidebar-card system-card">
+        <div class="sidebar-head">
+          <div class="sidebar-headline">
+            ${renderPanelIcon('⌘', 'primary')}
+            <h2>${escapeHtml(copy.systemTitle)}</h2>
+          </div>
+        </div>
+        <p class="empty-copy">${escapeHtml(copy.systemIntro)}</p>
+        <div class="system-shortcuts">
+          <button class="ghost-btn" data-action="open-settings">${escapeHtml(copy.openSettings)}</button>
+          <button class="ghost-btn" data-action="refresh-board">${escapeHtml(copy.refreshBoard)}</button>
+          <button class="ghost-btn" data-action="reset-view">${escapeHtml(copy.resetView)}</button>
+        </div>
+      </div>
       <div class="sidebar-card">
         <div class="sidebar-head">
           <div class="sidebar-headline">
@@ -931,8 +931,7 @@ function renderSidebar(copy: NewtabCopy, state: AppState, summary: WorkspaceSumm
           </div>
           <span>${summary.snapshotCount}</span>
         </div>
-        <p class="empty-copy">${escapeHtml(copy.snapshotsIntro)}</p>
-        <div class="group-actions">
+        <div class="snapshot-toolbar">
           <button class="ghost-btn" data-action="open-export-snapshot">${escapeHtml(copy.exportSnapshot)}</button>
           <button class="primary-btn" data-action="import-snapshot">${escapeHtml(copy.importSnapshot)}</button>
         </div>
@@ -962,7 +961,7 @@ function renderSidebar(copy: NewtabCopy, state: AppState, summary: WorkspaceSumm
                     </div>
                   ` : ''}
                 </div>
-                <div class="row-actions">
+                <div class="snapshot-actions">
                   <button class="ghost-btn" data-action="open-edit-snapshot" data-snapshot-id="${snapshot.id}">${escapeHtml(copy.edit)}</button>
                   <button class="ghost-btn" data-action="restore-snapshot" data-snapshot-id="${snapshot.id}">${escapeHtml(copy.restore)}</button>
                   <button class="ghost-btn danger" data-action="open-delete-snapshot" data-snapshot-id="${snapshot.id}">${escapeHtml(copy.delete)}</button>
@@ -1003,9 +1002,8 @@ function renderSidebar(copy: NewtabCopy, state: AppState, summary: WorkspaceSumm
         </div>
         ${state.recentClosed.length ? state.recentClosed.map((item) => `
           <div class="deferred-row">
-            <div class="deferred-copy">
+            <div class="deferred-copy" data-url-tooltip="${renderTooltipPayload(item.tabs.map((tab) => tab.url))}">
               <strong>${escapeHtml(item.label)}</strong>
-              <span>${escapeHtml(copy.recentTabCount(item.tabs.length))} · ${escapeHtml(formatRelativeTime(locale, item.closedAt))}</span>
             </div>
             <div class="row-actions">
               <button class="ghost-btn" data-action="restore-recent" data-recent-id="${item.id}">${escapeHtml(copy.restore)}</button>
@@ -1023,9 +1021,8 @@ function renderSidebar(copy: NewtabCopy, state: AppState, summary: WorkspaceSumm
           <span>${state.archive.length}</span>
         </div>
         ${state.archive.length ? state.archive.slice(0, 8).map((item) => `
-          <a class="archive-link" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">
+          <a class="archive-link" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer" data-url-tooltip="${escapeHtml(item.url)}">
             <span>${escapeHtml(item.title)}</span>
-            <small>${escapeHtml(formatRelativeTime(locale, item.completedAt || item.createdAt))}</small>
           </a>
         `).join('') : `<p class="empty-copy">${escapeHtml(copy.archiveEmpty)}</p>`}
       </div>

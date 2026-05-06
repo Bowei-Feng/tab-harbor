@@ -123,7 +123,7 @@ export function normalizeTab(raw: BrowserTabLike, settings: AppSettings): AppTab
   };
 }
 
-export function groupTabs(rawTabs: BrowserTabLike[], settings: AppSettings): TabGroup[] {
+export function groupTabs(rawTabs: BrowserTabLike[], settings: AppSettings, groupAliases: Record<string, string> = {}): TabGroup[] {
   // 分组策略分三层：先拎出 landing，再套自定义规则，最后回落到按域名分桶。
   const tabs = rawTabs
     .map((tab) => normalizeTab(tab, settings))
@@ -156,7 +156,8 @@ export function groupTabs(rawTabs: BrowserTabLike[], settings: AppSettings): Tab
     results.push({
       id: 'landing',
       kind: 'landing',
-      label: 'Harbor Deck',
+      label: groupAliases.landing || 'Harbor Deck',
+      sourceGroupIds: ['landing'],
       tabs: sortTabsWithinGroup(landing),
       duplicateCount: duplicateCount(landing)
     });
@@ -166,13 +167,50 @@ export function groupTabs(rawTabs: BrowserTabLike[], settings: AppSettings): Tab
     results.push({
       id,
       kind: group.kind,
-      label: group.label,
+      label: groupAliases[id] || group.label,
+      sourceGroupIds: [id],
       tabs: sortTabsWithinGroup(group.tabs),
       duplicateCount: duplicateCount(group.tabs)
     });
   }
 
-  return results.sort((a, b) => {
+  const aliasBuckets = new Map<string, TabGroup[]>();
+  const standalone: TabGroup[] = [];
+
+  for (const group of results) {
+    const alias = groupAliases[group.sourceGroupIds[0] ?? group.id]?.trim();
+    if (!alias) {
+      standalone.push(group);
+      continue;
+    }
+
+    if (!aliasBuckets.has(alias)) aliasBuckets.set(alias, []);
+    aliasBuckets.get(alias)!.push(group);
+  }
+
+  const mergedAliases = [...aliasBuckets.entries()].map(([alias, groups]) => {
+    if (groups.length === 1) return groups[0]!;
+
+    const mergedTabs = sortTabsWithinGroup(groups.flatMap((group) => group.tabs));
+    const sourceGroupIds = groups.flatMap((group) => group.sourceGroupIds);
+    const primary = groups
+      .slice()
+      .sort((a, b) => {
+        if (b.tabs.length !== a.tabs.length) return b.tabs.length - a.tabs.length;
+        return a.id.localeCompare(b.id);
+      })[0]!;
+
+    return {
+      id: `alias:${alias}`,
+      kind: primary.kind,
+      label: alias,
+      sourceGroupIds,
+      tabs: mergedTabs,
+      duplicateCount: duplicateCount(mergedTabs)
+    } satisfies TabGroup;
+  });
+
+  return [...standalone, ...mergedAliases].sort((a, b) => {
     if (a.kind === 'landing' && b.kind !== 'landing') return -1;
     if (b.kind === 'landing' && a.kind !== 'landing') return 1;
     return b.tabs.length - a.tabs.length;

@@ -1,14 +1,17 @@
 import './style.css';
+import { browser } from 'wxt/browser';
 import { createAppActions } from '@/lib/app/actions';
 import { initialAppState } from '@/lib/app/state';
 import { createStore } from '@/lib/app/store';
 import { parseWorkspaceSnapshot } from '@/lib/domain/workspace-snapshot';
 import { renderNewtab, type SnapshotDialogViewModel } from '@/lib/ui/newtab-render';
 import { formatSnapshotDraftName, pickLocale } from '@/lib/i18n';
+import { attachUrlTooltipController } from './url-tooltip-controller';
 
 const root = document.getElementById('app');
 const store = createStore(initialAppState);
 const actions = createAppActions(store);
+const urlTooltipController = attachUrlTooltipController(document);
 let draggingGroupId: string | null = null;
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 let searchCommitTimer: ReturnType<typeof setTimeout> | null = null;
@@ -101,13 +104,9 @@ function commitSearchQuery(value: string) {
   }
 }
 
-function scheduleSearchQuery(value: string, immediate = false) {
+function scheduleSearchQuery(value: string) {
   // 搜索框输入先走本地草稿，避免每敲一个字都触发整页重建。
   liveSearchQuery = value;
-  if (immediate) {
-    actions.setSearchQuery(value);
-    return;
-  }
 
   clearSearchCommitTimer();
   searchCommitTimer = setTimeout(() => {
@@ -155,6 +154,15 @@ function closeSnapshotDialog() {
     submitting: false
   };
   render();
+}
+
+function resetViewState() {
+  commitSearchQuery('');
+  actions.setSnapshotTagFilter('');
+  actions.setSortMode('smart');
+  actions.setDuplicatesOnly(false);
+  actions.setLayoutMode('merged');
+  actions.clearSelection();
 }
 
 function openExportSnapshotDialog() {
@@ -381,6 +389,7 @@ document.addEventListener('dragend', () => {
 });
 
 document.addEventListener('click', (event) => {
+  urlTooltipController.hide();
   const target = event.target as HTMLElement | null;
   const actionEl = target?.closest<HTMLElement>('[data-action]');
   if (!actionEl) return;
@@ -523,6 +532,49 @@ document.addEventListener('click', (event) => {
 
   if (action === 'clear-selection') {
     actions.clearSelection();
+    return;
+  }
+
+  if (action === 'open-settings') {
+    void runUiAction(
+      () => browser.runtime.openOptionsPage(),
+      t('Unable to open settings', '无法打开设置页')
+    );
+    return;
+  }
+
+  if (action === 'refresh-board') {
+    void runUiAction(
+      () => actions.refresh(),
+      t('Unable to refresh workspace', '无法刷新面板')
+    );
+    return;
+  }
+
+  if (action === 'reset-view') {
+    resetViewState();
+    return;
+  }
+
+  if (action === 'rename-group') {
+    const groupId = String(actionEl.dataset.groupId ?? '');
+    const currentLabel = String(actionEl.dataset.groupLabel ?? '').trim();
+    if (!groupId) return;
+
+    const nextLabel = window.prompt(
+      t(
+        'Rename this stack. Leave empty to restore the default name.',
+        '给这个堆栈起一个新名字。留空会恢复默认名称。'
+      ),
+      currentLabel
+    );
+
+    if (nextLabel === null) return;
+
+    void runUiAction(
+      () => actions.renameGroup(groupId, nextLabel),
+      t('Unable to rename stack', '无法重命名该堆栈')
+    );
     return;
   }
 

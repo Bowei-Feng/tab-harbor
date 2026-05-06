@@ -4,6 +4,7 @@ import type { AppTab, TabGroup } from '@/lib/domain/models';
 export interface DisplayGroup {
   id: string;
   baseGroupId: string;
+  sourceGroupIds: string[];
   kind: TabGroup['kind'];
   label: string;
   tabs: AppTab[];
@@ -93,13 +94,23 @@ function sortTabsForDisplay(tabs: AppTab[], sortMode: AppState['sortMode']) {
 }
 
 function orderRank(group: DisplayGroup, groupOrder: string[]): number {
-  const index = groupOrder.indexOf(group.baseGroupId);
+  const index = group.sourceGroupIds
+    .map((groupId) => groupOrder.indexOf(groupId))
+    .filter((value) => value !== -1)
+    .sort((a, b) => a - b)[0] ?? -1;
   return index === -1 ? Number.MAX_SAFE_INTEGER : index;
 }
 
 function pinRank(group: DisplayGroup, pinnedGroupIds: string[]): number {
-  const index = pinnedGroupIds.indexOf(group.baseGroupId);
+  const index = group.sourceGroupIds
+    .map((groupId) => pinnedGroupIds.indexOf(groupId))
+    .filter((value) => value !== -1)
+    .sort((a, b) => a - b)[0] ?? -1;
   return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+}
+
+function isPinnedGroup(group: Pick<DisplayGroup, 'sourceGroupIds'>, pinnedGroupIds: string[]): boolean {
+  return group.sourceGroupIds.some((groupId) => pinnedGroupIds.includes(groupId));
 }
 
 function sortGroupsForDisplay(
@@ -210,12 +221,13 @@ export function buildVisiblePresentation(state: AppState): VisiblePresentation {
 
       return {
         id: group.id,
-        baseGroupId: group.id,
+        baseGroupId: group.sourceGroupIds[0] ?? group.id,
+        sourceGroupIds: group.sourceGroupIds,
         kind: group.kind,
         label: group.label,
         tabs,
         duplicateCount: countDuplicates(tabs),
-        pinned: state.pinnedGroupIds.includes(group.id)
+        pinned: isPinnedGroup({ sourceGroupIds: group.sourceGroupIds }, state.pinnedGroupIds)
       } satisfies DisplayGroup;
     })
     .filter((group) => group.tabs.length > 0);
@@ -252,7 +264,7 @@ export function buildWorkspaceSummary(state: AppState, presentation: VisiblePres
     visibleGroups: presentation.groups.length,
     totalDuplicates: state.groups.reduce((sum, group) => sum + group.duplicateCount, 0),
     visibleDuplicates: presentation.groups.reduce((sum, group) => sum + group.duplicateCount, 0),
-    pinnedGroups: state.pinnedGroupIds.length,
+    pinnedGroups: state.groups.filter((group) => isPinnedGroup({ sourceGroupIds: group.sourceGroupIds }, state.pinnedGroupIds)).length,
     selectedTabs: state.selectedTabIds.length,
     deferredCount: state.deferred.length,
     snapshotCount: state.snapshots.length,

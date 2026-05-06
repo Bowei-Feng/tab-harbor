@@ -31,6 +31,7 @@ function makeGroup(id: string, label: string, tabs: AppTab[], kind: TabGroup['ki
     id,
     kind,
     label,
+    sourceGroupIds: [id],
     tabs,
     duplicateCount: [...counts.values()].reduce((sum, count) => sum + Math.max(0, count - 1), 0)
   };
@@ -50,6 +51,7 @@ function makeState(overrides: Partial<AppState> = {}): AppState {
     duplicatesOnly: false,
     layoutMode: 'merged',
     groupOrder: [],
+    groupAliases: {},
     pinnedGroupIds: [],
     snapshots: [],
     snapshotTagFilter: '',
@@ -178,6 +180,7 @@ describe('new tab presenter', () => {
         recentClosed: [],
         settings: defaultSettings,
         groupOrder: [],
+        groupAliases: {},
         pinnedGroupIds: []
       }]
     });
@@ -197,5 +200,38 @@ describe('new tab presenter', () => {
     ]);
     expect(summary.activeWindowLabel).toBe('Window 1');
     expect(summary.selectedTabs).toBe(2);
+  });
+
+  it('treats merged alias groups as pinned when any source group is pinned', () => {
+    const cloudATab = makeTab({
+      id: 1,
+      url: 'https://a.cloudlabs.example/app',
+      title: 'Cloudlabs A',
+      hostname: 'a.cloudlabs.example'
+    });
+    const cloudBTab = makeTab({
+      id: 2,
+      url: 'https://b.cloudlabs.example/app',
+      title: 'Cloudlabs B',
+      hostname: 'b.cloudlabs.example'
+    });
+
+    const state = makeState({
+      tabs: [cloudATab, cloudBTab],
+      groups: [{
+        id: 'alias:Cloudlabs',
+        kind: 'domain',
+        label: 'Cloudlabs',
+        sourceGroupIds: ['domain:a.cloudlabs.example', 'domain:b.cloudlabs.example'],
+        tabs: [cloudATab, cloudBTab],
+        duplicateCount: 0
+      }],
+      pinnedGroupIds: ['domain:b.cloudlabs.example']
+    });
+
+    const visible = buildVisiblePresentation(state);
+
+    expect(visible.groups).toHaveLength(1);
+    expect(visible.groups[0]?.pinned).toBe(true);
   });
 });

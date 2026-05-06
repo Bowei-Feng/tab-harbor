@@ -4,6 +4,7 @@ export const storageKeys = {
   settings: 'tabHarbor.settings',
   tabActivity: 'tabHarbor.tabActivity',
   groupOrder: 'tabHarbor.groupOrder',
+  groupAliases: 'tabHarbor.groupAliases',
   pinnedGroups: 'tabHarbor.pinnedGroups',
   snapshots: 'tabHarbor.snapshots'
 } as const;

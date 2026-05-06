@@ -35,6 +35,7 @@ function createSnapshot(id: string, source: 'auto' | 'manual' | 'imported', expo
       language: 'zh-CN' as const
     },
     groupOrder: [],
+    groupAliases: {},
     pinnedGroupIds: []
   };
 }
@@ -78,5 +79,32 @@ describe('snapshot repository', () => {
       'manual-1',
       'manual-2'
     ]);
+  });
+
+  it('replaces an existing snapshot when the same id is saved again', async () => {
+    await snapshotRepository.save(createSnapshot('auto-1', 'auto', '2026-05-06T08:11:00.000Z', 'https://auto-1.example'));
+    await snapshotRepository.save(createSnapshot('auto-1', 'auto', '2026-05-06T08:15:00.000Z', 'https://auto-1.example'));
+
+    const snapshots = await snapshotRepository.list();
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]?.id).toBe('auto-1');
+    expect(snapshots[0]?.exportedAt).toBe('2026-05-06T08:15:00.000Z');
+  });
+
+  it('round-trips group aliases through incremental entries', async () => {
+    await snapshotRepository.save(createSnapshot('manual-1', 'manual', '2026-05-06T08:00:00.000Z', 'https://a.example'));
+    await snapshotRepository.save({
+      ...createSnapshot('auto-1', 'auto', '2026-05-06T08:05:00.000Z', 'https://b.example'),
+      groupAliases: {
+        'domain:a.example': 'Alpha',
+        'domain:b.example': 'Beta'
+      }
+    });
+
+    const snapshots = await snapshotRepository.list();
+    expect(snapshots[0]?.groupAliases).toEqual({
+      'domain:a.example': 'Alpha',
+      'domain:b.example': 'Beta'
+    });
   });
 });

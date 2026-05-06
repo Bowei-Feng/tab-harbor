@@ -19,6 +19,7 @@ export interface AppState {
   duplicatesOnly: boolean;
   layoutMode: GroupLayoutMode;
   groupOrder: string[];
+  groupAliases: Record<string, string>;
   pinnedGroupIds: string[];
   snapshots: WorkspaceSnapshotV1[];
   snapshotTagFilter: string;
@@ -39,6 +40,7 @@ export const initialAppState: AppState = {
   duplicatesOnly: false,
   layoutMode: 'merged',
   groupOrder: [],
+  groupAliases: {},
   pinnedGroupIds: [],
   snapshots: [],
   snapshotTagFilter: '',

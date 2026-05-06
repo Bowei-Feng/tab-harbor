@@ -5,6 +5,7 @@ import type { Store } from '@/lib/app/store';
 import type { AppState } from '@/lib/app/state';
 import { closeTab, closeTabs, closeWindows, focusTab, listTabs, moveTabsToNewWindow, openTabWindows, openTabs } from '@/lib/platform/tabs-api';
 import { deferredRepository } from '@/lib/storage/deferred-repository';
+import { groupAliasRepository } from '@/lib/storage/group-alias-repository';
 import { groupOrderRepository } from '@/lib/storage/group-order-repository';
 import { pinnedGroupRepository } from '@/lib/storage/pinned-group-repository';
 import { recentClosedRepository } from '@/lib/storage/recent-closed-repository';
@@ -29,6 +30,7 @@ export interface AppActions {
   setSortMode(mode: AppState['sortMode']): void;
   setDuplicatesOnly(enabled: boolean): void;
   setLayoutMode(mode: AppState['layoutMode']): void;
+  renameGroup(groupId: string, label: string): Promise<void>;
   togglePinnedGroup(groupId: string): Promise<void>;
   toggleTabSelection(tabId: number): void;
   setTabSelection(tabIds: number[], selected: boolean): void;
@@ -70,8 +72,34 @@ export function createAppActions(store: Store<AppState>): AppActions {
     return t('Full Harbor Sweep', '整仓清理');
   }
 
+  function getDuplicateTabsLabel(): string {
+    return t('Duplicate Tabs', '重复标签');
+  }
+
   function getBaseGroupId(groupId: string): string {
     return groupId.split('__window__')[0] ?? groupId;
+  }
+
+  function uniqueGroupIds(groupIds: string[]): string[] {
+    return [...new Set(groupIds.map((groupId) => getBaseGroupId(groupId)).filter(Boolean))];
+  }
+
+  async function rememberClosedTabs(
+    label: string,
+    tabs: Array<{ url: string; title: string }>
+  ): Promise<void> {
+    if (!tabs.length) return;
+
+    const closedAt = new Date().toISOString();
+    await Promise.all([
+      recentClosedRepository.push({
+        id: `${Date.now()}:${label}`,
+        label,
+        closedAt,
+        tabs
+      }),
+      deferredRepository.upsertArchive(tabs)
+    ]);
   }
 
   function buildSnapshot(
@@ -82,6 +110,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
       recentClosed: AppState['recentClosed'];
       settings: AppState['settings'];
       groupOrder: AppState['groupOrder'];
+      groupAliases: AppState['groupAliases'];
       pinnedGroupIds: AppState['pinnedGroupIds'];
     },
     source: WorkspaceSnapshotV1['source'],
@@ -131,6 +160,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
       recentClosed: data.recentClosed,
       settings: data.settings,
       groupOrder: data.groupOrder,
+      groupAliases: data.groupAliases,
       pinnedGroupIds: data.pinnedGroupIds
     };
   }
@@ -142,6 +172,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
     settings: AppState['settings'];
     pinnedGroupIds: AppState['pinnedGroupIds'];
     groupOrder: AppState['groupOrder'];
+    groupAliases: AppState['groupAliases'];
   }): string {
     return buildWorkspaceSnapshotChangeSignature(buildSnapshot(
       {
@@ -151,6 +182,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
         recentClosed: [],
         settings: data.settings,
         groupOrder: data.groupOrder,
+        groupAliases: data.groupAliases,
         pinnedGroupIds: data.pinnedGroupIds
       },
       'auto',
@@ -166,6 +198,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
       recentClosed: AppState['recentClosed'];
       settings: AppState['settings'];
       groupOrder: AppState['groupOrder'];
+      groupAliases: AppState['groupAliases'];
       pinnedGroupIds: AppState['pinnedGroupIds'];
     },
     existingSnapshots: WorkspaceSnapshotV1[]
@@ -180,6 +213,17 @@ export function createAppActions(store: Store<AppState>): AppActions {
       : '';
     if (signature === lastAutoSnapshotSignature || signature === previousAutoSignature) {
       lastAutoSnapshotSignature = previousAutoSignature || signature;
+
+      // 如果内容和上一份自动快照完全一致，只刷新时间戳，不再生成新的最近版本。
+      if (previousAutoSnapshot) {
+        const refreshedSnapshot: WorkspaceSnapshotV1 = {
+          ...previousAutoSnapshot,
+          exportedAt: new Date().toISOString()
+        };
+        await snapshotRepository.save(refreshedSnapshot);
+        return await snapshotRepository.list();
+      }
+
       return;
     }
     lastAutoSnapshotSignature = signature;
@@ -200,6 +244,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
         deferredRepository.replace(snapshot.deferred),
         recentClosedRepository.replace(snapshot.recentClosed),
         groupOrderRepository.save(snapshot.groupOrder),
+        groupAliasRepository.save(snapshot.groupAliases),
         pinnedGroupRepository.save(snapshot.pinnedGroupIds),
         snapshotRepository.save(snapshot)
       ]);
@@ -225,6 +270,25 @@ export function createAppActions(store: Store<AppState>): AppActions {
     }));
   }
 
+  function resolveGroup(groupId: string) {
+    const resolvedId = getBaseGroupId(groupId);
+    return store.getState().groups.find((item) => (
+      item.id === groupId ||
+      item.id === resolvedId ||
+      item.sourceGroupIds.includes(resolvedId)
+    ));
+  }
+
+  function getGroupScopeIds(groupId: string): string[] {
+    const group = resolveGroup(groupId);
+    if (!group) return uniqueGroupIds([groupId]);
+    return uniqueGroupIds(group.sourceGroupIds.length ? group.sourceGroupIds : [group.id]);
+  }
+
+  function isGroupScopePinned(scopeIds: string[], pinnedGroupIds: string[]): boolean {
+    return scopeIds.some((groupId) => pinnedGroupIds.includes(groupId));
+  }
+
   function mergeVisibleGroupOrder(storedOrder: string[], reorderedVisible: string[], currentVisibleGroupIds: string[]) {
     const visibleSet = new Set(currentVisibleGroupIds);
     let cursor = 0;
@@ -234,11 +298,45 @@ export function createAppActions(store: Store<AppState>): AppActions {
         : groupId
     ));
     const missingVisible = reorderedVisible.filter((groupId) => !storedOrder.includes(groupId));
-    return [...new Set([...merged, ...missingVisible].filter(Boolean))];
+    return uniqueGroupIds([...merged, ...missingVisible]);
   }
 
-  function resolveGroup(groupId: string) {
-    return store.getState().groups.find((item) => item.id === getBaseGroupId(groupId));
+  function buildVisibleGroupOrder(storedOrder: string[]): string[] {
+    const visibleGroupIds = uniqueGroupIds(store.getState().groups.flatMap((group) => group.sourceGroupIds));
+    return [
+      ...storedOrder.filter((groupId) => visibleGroupIds.includes(groupId)),
+      ...visibleGroupIds.filter((groupId) => !storedOrder.includes(groupId))
+    ];
+  }
+
+  function moveGroupScopeWithinVisibleOrder(visibleOrder: string[], sourceScopeIds: string[], targetScopeIds: string[]): string[] {
+    const sourceScope = uniqueGroupIds([
+      ...visibleOrder.filter((groupId) => sourceScopeIds.includes(groupId)),
+      ...sourceScopeIds
+    ]);
+    const targetScope = uniqueGroupIds([
+      ...visibleOrder.filter((groupId) => targetScopeIds.includes(groupId)),
+      ...targetScopeIds
+    ]);
+    const sourceSet = new Set(sourceScope);
+    const targetSet = new Set(targetScope);
+    const remaining = visibleOrder.filter((groupId) => !sourceSet.has(groupId));
+
+    if (!sourceScope.length) return remaining;
+
+    const lastTargetIndex = remaining.reduce((lastIndex, groupId, index) => (
+      targetSet.has(groupId) ? index : lastIndex
+    ), -1);
+
+    if (lastTargetIndex === -1) {
+      return [...remaining, ...sourceScope];
+    }
+
+    return [
+      ...remaining.slice(0, lastTargetIndex + 1),
+      ...sourceScope,
+      ...remaining.slice(lastTargetIndex + 1)
+    ];
   }
 
   function resolveVisibleTabs(groupId: string, visibleTabIds?: number[]) {
@@ -266,7 +364,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
   }
 
   async function refresh() {
-    const [rawTabs, settings, deferredItems, recentClosed, activityMap, snapshots, groupOrder, pinnedGroupIds] = await Promise.all([
+    const [rawTabs, settings, deferredItems, recentClosed, activityMap, snapshots, groupOrder, groupAliases, pinnedGroupIds] = await Promise.all([
       listTabs(),
       settingsRepository.load(),
       deferredRepository.list(),
@@ -274,6 +372,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
       tabActivityRepository.list(),
       snapshotRepository.list(),
       groupOrderRepository.list(),
+      groupAliasRepository.list(),
       pinnedGroupRepository.list()
     ]);
     void tabActivityRepository.prune(
@@ -291,13 +390,14 @@ export function createAppActions(store: Store<AppState>): AppActions {
       .map((tab) => normalizeTab(tab, settings))
       .filter((tab): tab is NonNullable<typeof tab> => Boolean(tab));
 
-    const groups = groupTabs(hydratedTabs, settings);
+    const groups = groupTabs(hydratedTabs, settings, groupAliases);
     const deferredState = partitionDeferred(deferredItems);
     const autoSnapshots = await captureAutoSnapshot({
       tabs,
       recentClosed,
       settings,
       groupOrder,
+      groupAliases,
       pinnedGroupIds,
       ...deferredState
     }, snapshots);
@@ -310,6 +410,7 @@ export function createAppActions(store: Store<AppState>): AppActions {
       settings,
       recentClosed,
       groupOrder,
+      groupAliases,
       pinnedGroupIds,
       snapshots: autoSnapshots ?? snapshots,
       selectedTabIds: state.selectedTabIds.filter((tabId) => tabs.some((tab) => tab.id === tabId)),
@@ -341,12 +442,30 @@ export function createAppActions(store: Store<AppState>): AppActions {
     setLayoutMode(mode) {
       store.setState((state) => ({ ...state, layoutMode: mode }));
     },
+    async renameGroup(groupId, label) {
+      const group = resolveGroup(groupId);
+      if (!group) return;
+      const current = store.getState().groupAliases;
+      const next = { ...current };
+      const trimmed = label.trim();
+
+      for (const sourceGroupId of group.sourceGroupIds) {
+        if (trimmed) next[sourceGroupId] = trimmed;
+        else delete next[sourceGroupId];
+      }
+
+      await groupAliasRepository.save(next);
+      await refresh();
+    },
     async togglePinnedGroup(groupId) {
-      const baseGroupId = getBaseGroupId(groupId);
       const current = store.getState().pinnedGroupIds;
-      const next = current.includes(baseGroupId)
-        ? current.filter((id) => id !== baseGroupId)
-        : [baseGroupId, ...current];
+      const scopeIds = getGroupScopeIds(groupId);
+      if (!scopeIds.length) return;
+
+      const scopeSet = new Set(scopeIds);
+      const next = isGroupScopePinned(scopeIds, current)
+        ? current.filter((id) => !scopeSet.has(id))
+        : [...scopeIds, ...current.filter((id) => !scopeSet.has(id))];
 
       await pinnedGroupRepository.save(next);
       store.setState((state) => ({ ...state, pinnedGroupIds: next }));
@@ -377,25 +496,16 @@ export function createAppActions(store: Store<AppState>): AppActions {
       store.setState((state) => ({ ...state, selectedTabIds: [] }));
     },
     async reorderGroups(sourceGroupId, targetGroupId) {
-      const sourceId = getBaseGroupId(sourceGroupId);
-      const targetId = getBaseGroupId(targetGroupId);
-      if (!sourceId || !targetId || sourceId === targetId) return;
-
-      const currentIds = store.getState().groups.map((group) => group.id);
       const storedOrder = store.getState().groupOrder;
-      const orderedVisible = [
-        ...storedOrder.filter((groupId) => currentIds.includes(groupId)),
-        ...currentIds.filter((groupId) => !storedOrder.includes(groupId))
-      ];
+      const sourceScopeIds = getGroupScopeIds(sourceGroupId);
+      const targetScopeIds = getGroupScopeIds(targetGroupId);
+      if (!sourceScopeIds.length || !targetScopeIds.length) return;
+      if (sourceScopeIds.every((groupId) => targetScopeIds.includes(groupId))) return;
 
-      const sourceIndex = orderedVisible.indexOf(sourceId);
-      const targetIndex = orderedVisible.indexOf(targetId);
-      if (sourceIndex === -1 || targetIndex === -1) return;
-
-      const reorderedVisible = [...orderedVisible];
-      const [moved] = reorderedVisible.splice(sourceIndex, 1);
-      reorderedVisible.splice(targetIndex, 0, moved);
-      const next = mergeVisibleGroupOrder(storedOrder, reorderedVisible, currentIds);
+      const visibleGroupIds = uniqueGroupIds(store.getState().groups.flatMap((group) => group.sourceGroupIds));
+      const visibleOrder = buildVisibleGroupOrder(storedOrder);
+      const reorderedVisible = moveGroupScopeWithinVisibleOrder(visibleOrder, sourceScopeIds, targetScopeIds);
+      const next = mergeVisibleGroupOrder(storedOrder, reorderedVisible, visibleGroupIds);
 
       await groupOrderRepository.save(next);
       store.setState((state) => ({ ...state, groupOrder: next }));
@@ -414,15 +524,10 @@ export function createAppActions(store: Store<AppState>): AppActions {
       const { group, tabs } = resolved;
       const label = visibleLabel || group.label;
 
-      await recentClosedRepository.push({
-        id: `${Date.now()}:${group.id}`,
-        label,
-        closedAt: new Date().toISOString(),
-        tabs: tabs.map((tab) => ({
-          url: tab.url,
-          title: tab.cleanTitle || tab.title
-        }))
-      });
+      await rememberClosedTabs(label, tabs.map((tab) => ({
+        url: tab.url,
+        title: tab.cleanTitle || tab.title
+      })));
 
       await closeTabs(tabs.map((tab) => tab.id));
       await refresh();
@@ -439,15 +544,10 @@ export function createAppActions(store: Store<AppState>): AppActions {
       if (!groups.length) return;
 
       const tabs = groups.flatMap((group) => group.tabs);
-      await recentClosedRepository.push({
-        id: `${Date.now()}:full-sweep`,
-        label: getFullSweepLabel(),
-        closedAt: new Date().toISOString(),
-        tabs: tabs.map((tab) => ({
-          url: tab.url,
-          title: tab.cleanTitle || tab.title
-        }))
-      });
+      await rememberClosedTabs(getFullSweepLabel(), tabs.map((tab) => ({
+        url: tab.url,
+        title: tab.cleanTitle || tab.title
+      })));
 
       await closeTabs(tabs.map((tab) => tab.id));
       await refresh();
@@ -464,6 +564,12 @@ export function createAppActions(store: Store<AppState>): AppActions {
         if (seen.has(tab.url)) duplicateIds.push(tab.id);
         else seen.add(tab.url);
       }
+
+      const duplicateTabs = tabs.filter((tab) => duplicateIds.includes(tab.id));
+      await rememberClosedTabs(getDuplicateTabsLabel(), duplicateTabs.map((tab) => ({
+        url: tab.url,
+        title: tab.cleanTitle || tab.title
+      })));
 
       await closeTabs(duplicateIds);
       await refresh();
@@ -491,15 +597,10 @@ export function createAppActions(store: Store<AppState>): AppActions {
       if (!ids.length) return;
 
       const tabs = store.getState().tabs.filter((tab) => ids.includes(tab.id));
-      await recentClosedRepository.push({
-        id: `${Date.now()}:selected`,
-        label: getSelectedTabsLabel(),
-        closedAt: new Date().toISOString(),
-        tabs: tabs.map((tab) => ({
-          url: tab.url,
-          title: tab.cleanTitle || tab.title
-        }))
-      });
+      await rememberClosedTabs(getSelectedTabsLabel(), tabs.map((tab) => ({
+        url: tab.url,
+        title: tab.cleanTitle || tab.title
+      })));
 
       await closeTabs(ids);
       await refresh();

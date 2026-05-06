@@ -6,6 +6,7 @@ export interface DeferredRepository {
   list(): Promise<DeferredItem[]>;
   add(item: DeferredItem): Promise<void>;
   replace(items: DeferredItem[]): Promise<void>;
+  upsertArchive(items: Array<Pick<DeferredItem, 'url' | 'title'>>): Promise<void>;
   complete(id: string): Promise<void>;
   dismiss(id: string): Promise<void>;
 }
@@ -32,6 +33,11 @@ export interface TabActivityRepository {
 export interface GroupOrderRepository {
   list(): Promise<string[]>;
   save(order: string[]): Promise<void>;
+}
+
+export interface GroupAliasRepository {
+  list(): Promise<Record<string, string>>;
+  save(aliases: Record<string, string>): Promise<void>;
 }
 
 export interface PinnedGroupRepository {

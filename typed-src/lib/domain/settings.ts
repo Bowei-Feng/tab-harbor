@@ -29,9 +29,7 @@ export function normalizeLocale(value: unknown): AppLocale {
 }
 
 function detectDefaultLocale(): AppLocale {
-  // 默认语言只用来做首次体验，后续以用户在设置页里保存的值为准。
-  if (typeof navigator === 'undefined') return 'en';
-  return navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en';
+  return 'en';
 }
 
 export const defaultSettings: AppSettings = {

@@ -26,6 +26,7 @@ export interface WorkspaceSnapshotV1 {
   recentClosed: RecentClosedStack[];
   settings: AppSettings;
   groupOrder: string[];
+  groupAliases: Record<string, string>;
   pinnedGroupIds: string[];
 }
 
@@ -44,6 +45,19 @@ function normalizeStringArray(value: unknown): string[] {
       .map((item) => (typeof item === 'string' ? item.trim() : ''))
       .filter(Boolean)
   )];
+}
+
+function normalizeAliasMap(value: unknown): Record<string, string> {
+  if (!isRecord(value)) return {};
+
+  const aliases: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value).sort(([left], [right]) => left.localeCompare(right))) {
+    if (typeof raw !== 'string') continue;
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    aliases[key] = trimmed;
+  }
+  return aliases;
 }
 
 function parseSnapshotTab(value: unknown): SnapshotTab | null {
@@ -125,6 +139,7 @@ export function parseWorkspaceSnapshot(value: unknown): WorkspaceSnapshotV1 | nu
     !Array.isArray(snapshot.deferred) ||
     !Array.isArray(snapshot.recentClosed) ||
     !Array.isArray(snapshot.groupOrder) ||
+    (!isRecord(snapshot.groupAliases) && snapshot.groupAliases !== undefined) ||
     !Array.isArray(snapshot.pinnedGroupIds) ||
     !snapshot.settings
   ) {
@@ -158,6 +173,7 @@ export function parseWorkspaceSnapshot(value: unknown): WorkspaceSnapshotV1 | nu
     recentClosed,
     settings: normalizeAppSettings(snapshot.settings),
     groupOrder: normalizeStringArray(snapshot.groupOrder),
+    groupAliases: normalizeAliasMap(snapshot.groupAliases),
     pinnedGroupIds: normalizeStringArray(snapshot.pinnedGroupIds)
   };
 }
@@ -167,7 +183,7 @@ export function isWorkspaceSnapshotV1(value: unknown): value is WorkspaceSnapsho
 }
 
 export function buildWorkspaceSnapshotSignature(
-  snapshot: Pick<WorkspaceSnapshotV1, 'windows' | 'deferred' | 'groupOrder' | 'pinnedGroupIds'>
+  snapshot: Pick<WorkspaceSnapshotV1, 'windows' | 'deferred' | 'groupOrder' | 'groupAliases' | 'pinnedGroupIds'>
 ): string {
   // 签名只保留会影响工作区结构的关键信息，用来判断自动快照是否真的发生了变化。
   return JSON.stringify({
@@ -178,12 +194,13 @@ export function buildWorkspaceSnapshotSignature(
     })),
     deferred: snapshot.deferred.map((item) => item.url),
     groupOrder: snapshot.groupOrder,
+    groupAliases: snapshot.groupAliases,
     pinnedGroupIds: snapshot.pinnedGroupIds
   });
 }
 
 export function buildWorkspaceSnapshotChangeSignature(
-  snapshot: Pick<WorkspaceSnapshotV1, 'windows' | 'deferred' | 'settings' | 'groupOrder' | 'pinnedGroupIds'>
+  snapshot: Pick<WorkspaceSnapshotV1, 'windows' | 'deferred' | 'settings' | 'groupOrder' | 'groupAliases' | 'pinnedGroupIds'>
 ): string {
   // 增量快照更关心“工作区结构有没有实质变化”，不关心当前激活页或窗口焦点这种高频抖动。
   return JSON.stringify({
@@ -197,6 +214,7 @@ export function buildWorkspaceSnapshotChangeSignature(
     })),
     settings: snapshot.settings,
     groupOrder: snapshot.groupOrder,
+    groupAliases: snapshot.groupAliases,
     pinnedGroupIds: snapshot.pinnedGroupIds
   });
 }

@@ -390,6 +390,10 @@ input[type="checkbox"] {
   gap: 14px;
 }
 
+.single-language-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .language-choice {
   display: flex;
   gap: 12px;
@@ -413,6 +417,10 @@ input[type="checkbox"] {
 .language-choice input {
   margin-top: 2px;
   flex: 0 0 auto;
+}
+
+.language-choice-static {
+  cursor: default;
 }
 
 .language-choice-copy {

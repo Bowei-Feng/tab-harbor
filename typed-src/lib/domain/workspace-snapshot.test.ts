@@ -62,6 +62,10 @@ describe('workspace snapshots', () => {
         soundEnabled: false
       },
       groupOrder: [' domain:github.com ', '', 'domain:github.com'],
+      groupAliases: {
+        'domain:github.com': ' GitHub Core ',
+        'domain:docs.microsoft.com': ''
+      },
       pinnedGroupIds: ['domain:github.com', 'domain:github.com']
     });
 
@@ -73,6 +77,7 @@ describe('workspace snapshots', () => {
     expect(snapshot?.recentClosed).toHaveLength(1);
     expect(snapshot?.settings.hiddenDomains).toEqual(['github.com']);
     expect(snapshot?.groupOrder).toEqual(['domain:github.com']);
+    expect(snapshot?.groupAliases).toEqual({ 'domain:github.com': 'GitHub Core' });
     expect(snapshot?.pinnedGroupIds).toEqual(['domain:github.com']);
   });
 
@@ -100,6 +105,9 @@ describe('workspace snapshots', () => {
         confettiEnabled: true
       },
       groupOrder: ['domain:github.com'],
+      groupAliases: {
+        'domain:github.com': 'GitHub'
+      },
       pinnedGroupIds: ['domain:github.com']
     });
 
@@ -128,6 +136,9 @@ describe('workspace snapshots', () => {
         language: 'zh-CN'
       },
       groupOrder: ['domain:github.com'],
+      groupAliases: {
+        'domain:github.com': 'GitHub'
+      },
       pinnedGroupIds: ['domain:github.com']
     });
 
@@ -150,6 +161,9 @@ describe('workspace snapshots', () => {
         language: 'zh-CN'
       },
       groupOrder: ['domain:github.com'],
+      groupAliases: {
+        'domain:github.com': 'GitHub'
+      },
       pinnedGroupIds: ['domain:github.com']
     });
 

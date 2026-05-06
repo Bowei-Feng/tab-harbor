@@ -8,7 +8,7 @@ const NAMED_LIMIT = 3;
 
 type SnapshotChangeSet = Partial<Pick<
   WorkspaceSnapshotV1,
-  'windows' | 'deferred' | 'recentClosed' | 'settings' | 'groupOrder' | 'pinnedGroupIds'
+  'windows' | 'deferred' | 'recentClosed' | 'settings' | 'groupOrder' | 'groupAliases' | 'pinnedGroupIds'
 >>;
 
 interface SnapshotFullEntry {
@@ -56,6 +56,7 @@ function buildDeltaEntry(previous: WorkspaceSnapshotV1, current: WorkspaceSnapsh
   if (!isEqual(previous.recentClosed, current.recentClosed)) changes.recentClosed = current.recentClosed;
   if (!isEqual(previous.settings, current.settings)) changes.settings = current.settings;
   if (!isEqual(previous.groupOrder, current.groupOrder)) changes.groupOrder = current.groupOrder;
+  if (!isEqual(previous.groupAliases, current.groupAliases)) changes.groupAliases = current.groupAliases;
   if (!isEqual(previous.pinnedGroupIds, current.pinnedGroupIds)) changes.pinnedGroupIds = current.pinnedGroupIds;
 
   return {
@@ -98,6 +99,7 @@ function materializeJournal(journal: SnapshotJournalV1): WorkspaceSnapshotV1[] {
       recentClosed: entry.changes.recentClosed ?? previous.recentClosed,
       settings: entry.changes.settings ?? previous.settings,
       groupOrder: entry.changes.groupOrder ?? previous.groupOrder,
+      groupAliases: entry.changes.groupAliases ?? previous.groupAliases,
       pinnedGroupIds: entry.changes.pinnedGroupIds ?? previous.pinnedGroupIds
     });
 

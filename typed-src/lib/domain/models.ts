@@ -31,6 +31,7 @@ export interface TabGroup {
   id: string;
   kind: GroupKind;
   label: string;
+  sourceGroupIds: string[];
   tabs: AppTab[];
   duplicateCount: number;
 }
