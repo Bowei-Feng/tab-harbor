@@ -58,4 +58,44 @@ describe('group aliases', () => {
     ]);
     expect(groups[0]?.tabs).toHaveLength(2);
   });
+
+  it('merges a renamed group into another group that already uses that visible label by default', () => {
+    const groups = groupTabs([
+      {
+        id: 1,
+        url: 'https://learn.microsoft.com/en-us/azure/',
+        title: 'Azure Learn',
+        windowId: 10,
+        tabIndex: 0
+      },
+      {
+        id: 2,
+        url: 'https://learn.microsoft.com/en-us/power-bi/',
+        title: 'Power BI Learn',
+        windowId: 10,
+        tabIndex: 1
+      },
+      {
+        id: 3,
+        url: 'https://learn.microsoft.org/en-us/fabric/',
+        title: 'Fabric Learn',
+        windowId: 10,
+        tabIndex: 2
+      },
+      {
+        id: 4,
+        url: 'https://learn.microsoft.org/en-us/copilot/',
+        title: 'Copilot Learn',
+        windowId: 10,
+        tabIndex: 3
+      }
+    ], defaultSettings, {
+      'domain:learn.microsoft.org': 'Learn Microsoft'
+    });
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.id).toBe('alias:Learn Microsoft');
+    expect(groups[0]?.label).toBe('Learn Microsoft');
+    expect(groups[0]?.tabs).toHaveLength(4);
+  });
 });

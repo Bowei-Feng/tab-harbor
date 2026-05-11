@@ -174,22 +174,24 @@ export function groupTabs(rawTabs: BrowserTabLike[], settings: AppSettings, grou
     });
   }
 
-  const aliasBuckets = new Map<string, TabGroup[]>();
-  const standalone: TabGroup[] = [];
+  // 允许“一个分组被改名成另一个分组当前显示名”时也合并。
+  // 这样像默认叫 Learn Microsoft 的分组，和另一个被用户改成 Learn Microsoft 的分组，会在刷新后并到一起。
+  const labelBuckets = new Map<string, Array<TabGroup & { aliasApplied: boolean }>>();
 
   for (const group of results) {
-    const alias = groupAliases[group.sourceGroupIds[0] ?? group.id]?.trim();
-    if (!alias) {
-      standalone.push(group);
-      continue;
-    }
-
-    if (!aliasBuckets.has(alias)) aliasBuckets.set(alias, []);
-    aliasBuckets.get(alias)!.push(group);
+    const alias = groupAliases[group.sourceGroupIds[0] ?? group.id]?.trim() ?? '';
+    const bucket = labelBuckets.get(group.label) ?? [];
+    bucket.push({
+      ...group,
+      aliasApplied: Boolean(alias)
+    });
+    labelBuckets.set(group.label, bucket);
   }
 
-  const mergedAliases = [...aliasBuckets.entries()].map(([alias, groups]) => {
-    if (groups.length === 1) return groups[0]!;
+  const mergedAliases = [...labelBuckets.entries()].flatMap(([label, groups]) => {
+    if (groups.length === 1 || !groups.some((group) => group.aliasApplied)) {
+      return groups.map(({ aliasApplied, ...group }) => group);
+    }
 
     const mergedTabs = sortTabsWithinGroup(groups.flatMap((group) => group.tabs));
     const sourceGroupIds = groups.flatMap((group) => group.sourceGroupIds);
@@ -201,16 +203,16 @@ export function groupTabs(rawTabs: BrowserTabLike[], settings: AppSettings, grou
       })[0]!;
 
     return {
-      id: `alias:${alias}`,
+      id: `alias:${label}`,
       kind: primary.kind,
-      label: alias,
+      label,
       sourceGroupIds,
       tabs: mergedTabs,
       duplicateCount: duplicateCount(mergedTabs)
     } satisfies TabGroup;
   });
 
-  return [...standalone, ...mergedAliases].sort((a, b) => {
+  return mergedAliases.sort((a, b) => {
     if (a.kind === 'landing' && b.kind !== 'landing') return -1;
     if (b.kind === 'landing' && a.kind !== 'landing') return 1;
     return b.tabs.length - a.tabs.length;

@@ -6,6 +6,9 @@ import {
   type DisplaySection,
   type WorkspaceSummary
 } from '@/lib/ui/newtab-presenter';
+import { getNewtabCopy, type NewtabCopy } from '@/lib/ui/newtab-copy';
+import { renderBrandLockup } from '@/lib/ui/shared/brand';
+import { escapeHtml } from '@/lib/ui/shared/html';
 import { formatRelativeTime, getSnapshotSourceLabel } from '@/lib/i18n';
 
 export interface SnapshotDialogViewModel {
@@ -25,173 +28,6 @@ export interface NewtabRenderOptions {
 
 const STACK_PREVIEW_LIMIT = 6;
 
-interface NewtabCopy {
-  brandCaption: string;
-  heroTitle: string;
-  heroCopy: string;
-  heroOpenNow(count: number): string;
-  heroPinned(count: number): string;
-  heroSnapshots(count: number): string;
-  workspaceBrief: string;
-  briefTitle: string;
-  visibleNow: string;
-  duplicates: string;
-  selected: string;
-  laterQueue: string;
-  flowSearch: string;
-  flowSelect: string;
-  flowMove: string;
-  briefNote: string;
-  metricWorkspaceNow: string;
-  metricWorkspaceNote(summary: WorkspaceSummary): string;
-  metricCleanupRisk: string;
-  metricCleanupNote(count: number): string;
-  metricSelection: string;
-  metricRecovery: string;
-  metricSelectionNote: string;
-  metricRecoveryNote(summary: WorkspaceSummary): string;
-  searchChip(query: string): string;
-  fullWorkspace: string;
-  tabsChip(count: number): string;
-  stacksChip(count: number): string;
-  duplicateChip(count: number): string;
-  noDuplicateChip: string;
-  byWindowChip: string;
-  recentOrderChip: string;
-  select: string;
-  selectedChip(count: number): string;
-  focusedWorkspace: string;
-  openStacks: string;
-  toolbarCopy: string;
-  scopeSummary(hasQuery: boolean, summary: WorkspaceSummary): string;
-  closeAllOpenTabs: string;
-  searchPlaceholder: string;
-  clearSearch: string;
-  smart: string;
-  recent: string;
-  duplicatesOnly: string;
-  merged: string;
-  byWindow: string;
-  liveSearchNote: string;
-  searchTip: string;
-  shortcutHint: string;
-  selectedSummary(count: number): string;
-  noSelectionSummary: string;
-  visibleChip(count: number): string;
-  visibleScopeOnly: string;
-  selectRowsHint: string;
-  hiddenSelectionChip(count: number): string;
-  selectedCopy: string;
-  emptySelectionCopy: string;
-  unselectVisible: string;
-  selectVisible: string;
-  clear: string;
-  moveToLater(count: number): string;
-  newWindow(count: number): string;
-  closeSelected(count: number): string;
-  kindRule: string;
-  kindLanding: string;
-  kindDomain: string;
-  pin: string;
-  pinned: string;
-  pinAria(active: boolean): string;
-  reorder: string;
-  reorderHint: string;
-  selectTab: string;
-  unselectTab: string;
-  activeTab: string;
-  later: string;
-  close: string;
-  rename: string;
-  stackTabs(count: number): string;
-  duplicatesBadge(count: number): string;
-  cleanBadge: string;
-  windowBadge(id: number): string;
-  selectedBadge(count: number): string;
-  stackOverflow(count: number): string;
-  closeStack: string;
-  closeDuplicates(count: number): string;
-  windowView: string;
-  windowTitle(id: string): string;
-  windowTabCount(count: number): string;
-  startHere: string;
-  gettingStarted: string;
-  firstSession: string;
-  scopedCleanup: string;
-  filteredView: string;
-  workspaceClear: string;
-  noOpenTabs: string;
-  guideCalloutDefault: string;
-  guideCalloutFirst: string;
-  guideCalloutScoped: string;
-  guideCalloutClear: string;
-  guideDefaultPills: string[];
-  guideFirstPills: string[];
-  guideScopedPills: string[];
-  guideClearPills: string[];
-  guideDefaultSteps: Array<{ title: string; copy: string }>;
-  guideFirstSteps: Array<{ title: string; copy: string }>;
-  guideScopedSteps: Array<{ title: string; copy: string }>;
-  guideClearSteps: Array<{ title: string; copy: string }>;
-  snapshotsTitle: string;
-  snapshotsIntro: string;
-  systemTitle: string;
-  systemIntro: string;
-  openSettings: string;
-  refreshBoard: string;
-  resetView: string;
-  exportSnapshot: string;
-  importSnapshot: string;
-  all: string;
-  noTaggedSnapshots: string;
-  noSnapshots: string;
-  edit: string;
-  restore: string;
-  delete: string;
-  laterDock: string;
-  laterEmpty: string;
-  done: string;
-  dismiss: string;
-  recentClosures: string;
-  recentTabCount(count: number): string;
-  recentEmpty: string;
-  archive: string;
-  archiveEmpty: string;
-  snapshotEyebrow: string;
-  deleteSnapshot: string;
-  cancel: string;
-  keepIt: string;
-  deleteConfirm(name: string): string;
-  deleting: string;
-  exportSnapshotTitle: string;
-  editSnapshotTitle: string;
-  modalCopy: string;
-  snapshotName: string;
-  snapshotTags: string;
-  snapshotNote: string;
-  snapshotNamePlaceholder: string;
-  snapshotTagsPlaceholder: string;
-  snapshotNotePlaceholder: string;
-  exporting: string;
-  saveSnapshot: string;
-  saving: string;
-  noVisibleResult: string;
-  noMatchTitle: string;
-  noMatchCopy: string;
-  showAllTabs: string;
-  workspaceComplete: string;
-  workspaceClearTitle: string;
-  workspaceClearCopy: string;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 function renderHighlightedText(value: string, query: string): string {
   if (!query) return escapeHtml(value);
 
@@ -207,390 +43,9 @@ function renderHighlightedText(value: string, query: string): string {
   ].join('');
 }
 
-function getNewtabCopy(locale: AppState['settings']['language']): NewtabCopy {
-  if (locale === 'zh-CN') {
-    return {
-      brandCaption: '重浏览器工作流的整理面板',
-      heroTitle: '把散开的标签页，收成一个更清楚的工作台。',
-      heroCopy: '先定位正在做的事，再把其余内容归档、暂存或批量处理。大动作之前也能先留一个可恢复的工作区快照。',
-      heroOpenNow: (count) => `当前打开 · ${count} 个标签页`,
-      heroPinned: (count) => `置顶分组 · ${count}`,
-      heroSnapshots: (count) => `已存快照 · ${count}`,
-      workspaceBrief: '工作区速览',
-      briefTitle: '默认就该足够清楚',
-      visibleNow: '当前可见',
-      duplicates: '重复标签',
-      selected: '已选中',
-      laterQueue: '稍后处理',
-      flowSearch: '检索',
-      flowSelect: '选择',
-      flowMove: '移动或关闭',
-      briefNote: '先缩小范围，再下动作。大批量清理前先留一个快照，后面回退会轻松很多。',
-      metricWorkspaceNow: '当前工作区',
-      metricWorkspaceNote: (summary) => `${summary.visibleGroups} 个堆栈 · ${summary.windowCount} 个窗口`,
-      metricCleanupRisk: '需要优先整理',
-      metricCleanupNote: (count) => count ? '当前视图里还有重复标签' : '当前视图里没有重复标签',
-      metricSelection: '当前选择',
-      metricRecovery: '恢复能力',
-      metricSelectionNote: '可以直接做批量动作',
-      metricRecoveryNote: (summary) => `${summary.snapshotCount} 个快照 · ${summary.deferredCount} 个稍后处理`,
-      searchChip: (query) => `搜索 · “${query}”`,
-      fullWorkspace: '完整工作区',
-      tabsChip: (count) => `${count} 个标签页`,
-      stacksChip: (count) => `${count} 个堆栈`,
-      duplicateChip: (count) => `${count} 个重复项`,
-      noDuplicateChip: '无重复项',
-      byWindowChip: '按窗口拆分',
-      recentOrderChip: '按最近使用',
-      select: '选择',
-      selectedChip: (count) => `已选 ${count}`,
-      focusedWorkspace: '聚焦视图',
-      openStacks: '打开中的堆栈',
-      toolbarCopy: '先筛，再动手。下面的所有操作都会尊重你当前看到的范围。',
-      scopeSummary: (hasQuery, summary) => (
-        hasQuery
-          ? '当前是检索后的聚焦视图。'
-          : '当前是完整工作区视图。'
-      ),
-      closeAllOpenTabs: '关闭全部打开标签页',
-      searchPlaceholder: '检索标签页、域名或堆栈名称',
-      clearSearch: '清空',
-      smart: '智能',
-      recent: '最近',
-      duplicatesOnly: '只看重复项',
-      merged: '合并视图',
-      byWindow: '分窗口',
-      liveSearchNote: '检索已开启，按 Esc 可以快速清空。',
-      searchTip: '建议先检索，再做批量操作，风险会低很多。',
-      shortcutHint: '快捷键：/ 聚焦搜索，Esc 清空，j/k 移动，x 选择。',
-      selectedSummary: (count) => `已选中 ${count} 个标签页`,
-      noSelectionSummary: '还没有选中任何标签页',
-      visibleChip: (count) => `当前可见 ${count}`,
-      visibleScopeOnly: '只作用于当前可见范围',
-      selectRowsHint: '可选中单行、整个堆栈，或当前全部可见结果。',
-      hiddenSelectionChip: (count) => `另有 ${count} 个选中项不在当前筛选里`,
-      selectedCopy: '批量操作只会作用于当前仍可见的已选标签页。',
-      emptySelectionCopy: '先选中几项，再批量移动、拆窗或关闭。',
-      unselectVisible: '取消当前可见',
-      selectVisible: '选中当前可见',
-      clear: '清空选择',
-      moveToLater: (count) => count ? `移到稍后处理 · ${count}` : '移到稍后处理',
-      newWindow: (count) => count ? `移到新窗口 · ${count}` : '移到新窗口',
-      closeSelected: (count) => count ? `关闭已选 · ${count}` : '关闭已选',
-      kindRule: '命名规则',
-      kindLanding: '首页堆栈',
-      kindDomain: '域名堆栈',
-      pin: '置顶',
-      pinned: '已置顶',
-      pinAria: (active) => active ? '取消置顶该堆栈' : '把该堆栈置顶',
-      reorder: '排序',
-      reorderHint: '拖动调整堆栈优先级',
-      selectTab: '选择标签页',
-      unselectTab: '取消选择标签页',
-      activeTab: '当前活跃',
-      later: '稍后',
-      close: '关闭',
-      rename: '重命名',
-      stackTabs: (count) => `${count} 个标签页`,
-      duplicatesBadge: (count) => `${count} 个重复项`,
-      cleanBadge: '已清爽',
-      windowBadge: (id) => `窗口 ${id}`,
-      selectedBadge: (count) => `已选 ${count}`,
-      stackOverflow: (count) => `这个堆栈里还有 ${count} 个未展开标签页`,
-      closeStack: '关闭整个堆栈',
-      closeDuplicates: (count) => `关闭重复项 · ${count}`,
-      windowView: '窗口视图',
-      windowTitle: (id) => `窗口 ${id}`,
-      windowTabCount: (count) => `${count} 个标签页`,
-      startHere: '从这里开始',
-      gettingStarted: '第一次整理',
-      firstSession: '首次使用',
-      scopedCleanup: '当前已缩小范围',
-      filteredView: '筛选视图',
-      workspaceClear: '工作区已清空',
-      noOpenTabs: '没有打开标签页',
-      guideCalloutDefault: '建议先过滤，再留快照，最后只对当前可见内容动手。',
-      guideCalloutFirst: '第一次整理时，不用一次做完。先找一个明确目标，存一个快照，再小批量处理。',
-      guideCalloutScoped: '你已经处在缩小后的视图里了，下面的批量操作只会作用于当前还能看到的标签页。',
-      guideCalloutClear: '面板现在是空的。你可以恢复一个快照，也可以从一个全新的干净工作区重新开始。',
-      guideDefaultPills: ['检索', '留快照', '执行'],
-      guideFirstPills: ['观察', '备份', '整理'],
-      guideScopedPills: ['确认范围', '选择', '处理'],
-      guideClearPills: ['恢复', '重建', '继续'],
-      guideDefaultSteps: [
-        { title: '先缩小目标', copy: '可以先用搜索或只看重复项，不要一上来就面对全部堆栈。' },
-        { title: '先留一个快照', copy: '工作区比较重要时，先导出快照，后面回退会更稳。' },
-        { title: '只处理当前可见范围', copy: '选中单行、整个堆栈或当前全部可见结果，避免误伤隐藏内容。' }
-      ],
-      guideFirstSteps: [
-        { title: '先找一类最明显的噪音', copy: '从一个关键词、一个域名，或者重复项开始，效果最直观。' },
-        { title: '先存第一份快照', copy: '第一轮整理前有快照，后面想恢复就不会心里没底。' },
-        { title: '用小批量动作推进', copy: '一次只移动或关闭一小批，工作区会更容易建立信任感。' }
-      ],
-      guideScopedSteps: [
-        { title: '先看顶部状态', copy: '顶部状态条会告诉你当前是搜索结果、重复视图还是按窗口查看。' },
-        { title: '只选你真正要处理的内容', copy: '当前视图的选择不会波及被过滤掉的堆栈。' },
-        { title: '处理重复项或过载堆栈', copy: '确认范围没问题后，再关闭重复项、移到稍后处理或拆到新窗口。' }
-      ],
-      guideClearSteps: [
-        { title: '恢复之前的工作区', copy: '如果你想把某次会话完整找回来，可以直接恢复快照。' },
-        { title: '顺手整理显示规则', copy: '在设置里收掉后台噪音，下次工作区会更干净。' },
-        { title: '让稍后处理更有节制', copy: '后续新增内容先移到稍后处理，不要再把主面板堆满。' }
-      ],
-      snapshotsTitle: '工作区快照',
-      snapshotsIntro: '大动作前先存一份工作区版本，需要时可以把标签页、设置和分组优先级一并恢复回来。',
-      systemTitle: '系统入口',
-      systemIntro: '设置、刷新和视图重置放在这里。',
-      openSettings: '设置',
-      refreshBoard: '刷新面板',
-      resetView: '重置视图',
-      exportSnapshot: '导出快照',
-      importSnapshot: '导入快照',
-      all: '全部',
-      noTaggedSnapshots: '当前标签下还没有快照，可以换个标签看看，或者新建一份带标签的快照。',
-      noSnapshots: '还没有快照。建议在第一次大批量清理前先存一份。',
-      edit: '编辑',
-      restore: '恢复',
-      delete: '删除',
-      laterDock: '稍后处理',
-      laterEmpty: '这里还没有内容。把暂时不处理的标签页移过来，主面板会更轻。',
-      done: '完成',
-      dismiss: '移除',
-      recentClosures: '最近关闭',
-      recentTabCount: (count) => `${count} 个标签页`,
-      recentEmpty: '最近关闭的堆栈会先留在这里，方便你快速恢复。',
-      archive: '归档记录',
-      archiveEmpty: '完成的稍后处理项会留在这里，作为轻量历史。',
-      snapshotEyebrow: '工作区快照',
-      deleteSnapshot: '删除快照',
-      cancel: '取消',
-      keepIt: '先保留',
-      deleteConfirm: (name) => `要把“${name}”从本地快照列表中移除吗？`,
-      deleting: '删除中…',
-      exportSnapshotTitle: '导出快照',
-      editSnapshotTitle: '编辑快照',
-      modalCopy: '给这次工作区起个名字、加一点备注和标签，后面查找和恢复都会更快。',
-      snapshotName: '名称',
-      snapshotTags: '标签',
-      snapshotNote: '备注',
-      snapshotNamePlaceholder: '例如：四月评审工作区',
-      snapshotTagsPlaceholder: '例如：client-a, review, urgent',
-      snapshotNotePlaceholder: '记录这份工作区为什么重要，或者恢复时应该先看什么。',
-      exporting: '导出中…',
-      saveSnapshot: '保存快照',
-      saving: '保存中…',
-      noVisibleResult: '当前没有可见结果',
-      noMatchTitle: '没有匹配到标签页',
-      noMatchCopy: '可以换一个关键词，关闭“只看重复项”，或者清空当前筛选后再看完整工作区。',
-      showAllTabs: '显示全部标签页',
-      workspaceComplete: '工作区已整理完',
-      workspaceClearTitle: '当前工作区是空的',
-      workspaceClearCopy: '这里已经没有待处理的打开标签页了。如果你想回到某次会话，可以直接恢复一个快照。'
-    };
-  }
-
-  return {
-    brandCaption: 'Workspace control for heavy browser sessions',
-    heroTitle: 'Turn tab sprawl into a clean working surface.',
-    heroCopy: 'Find the right tab, park the rest, and keep a recoverable checkpoint before any big cleanup pass.',
-    heroOpenNow: (count) => `Open now · ${count} tabs`,
-    heroPinned: (count) => `Pinned stacks · ${count}`,
-    heroSnapshots: (count) => `Saved snapshots · ${count}`,
-    workspaceBrief: 'Workspace Brief',
-    briefTitle: 'Simple by default',
-    visibleNow: 'Visible now',
-    duplicates: 'Duplicates',
-    selected: 'Selected',
-    laterQueue: 'Later queue',
-    flowSearch: 'Search',
-    flowSelect: 'Select',
-    flowMove: 'Move or close',
-    briefNote: 'Narrow the board first. Save a snapshot before a large cleanup, then act only on what stays visible.',
-    metricWorkspaceNow: 'Workspace now',
-    metricWorkspaceNote: (summary) => `${summary.visibleGroups} stacks · ${summary.windowCount} windows`,
-    metricCleanupRisk: 'Cleanup risk',
-    metricCleanupNote: (count) => count ? 'Duplicate tabs in view' : 'No duplicates in view',
-    metricSelection: 'Selection',
-    metricRecovery: 'Recovery',
-    metricSelectionNote: 'Ready for batch actions',
-    metricRecoveryNote: (summary) => `${summary.snapshotCount} snapshots · ${summary.deferredCount} in Later`,
-    searchChip: (query) => `Search · "${query}"`,
-    fullWorkspace: 'Full workspace',
-    tabsChip: (count) => `${count} tabs`,
-    stacksChip: (count) => `${count} stacks`,
-    duplicateChip: (count) => `${count} duplicates`,
-    noDuplicateChip: 'No duplicates',
-    byWindowChip: 'By window',
-    recentOrderChip: 'Recent order',
-    select: 'Select',
-    selectedChip: (count) => `${count} selected`,
-    focusedWorkspace: 'Focused workspace',
-    openStacks: 'Open stacks',
-    toolbarCopy: 'Search first. Every action below stays scoped to what you can see.',
-    scopeSummary: (hasQuery, summary) => (
-      hasQuery
-        ? 'Focused on the current search result.'
-        : 'Showing the full workspace.'
-    ),
-    closeAllOpenTabs: 'Close all open tabs',
-    searchPlaceholder: 'Search tabs, domains, or stack names',
-    clearSearch: 'Clear',
-    smart: 'Smart',
-    recent: 'Recent',
-    duplicatesOnly: 'Duplicates only',
-    merged: 'Merged',
-    byWindow: 'By window',
-    liveSearchNote: 'Live search is active. Press Esc to clear it quickly.',
-    searchTip: 'Tip: search first, then batch actions stay narrow and safer.',
-    shortcutHint: 'Shortcuts: / search, Esc clear, j/k move, x select.',
-    selectedSummary: (count) => `${count} tabs selected`,
-    noSelectionSummary: 'No tabs selected yet',
-    visibleChip: (count) => `${count} visible`,
-    visibleScopeOnly: 'Visible scope only',
-    selectRowsHint: 'Select rows, a full stack, or the full visible result.',
-    hiddenSelectionChip: (count) => `${count} selected outside filters`,
-    selectedCopy: 'Batch actions only touch the selected tabs that are still visible in this view.',
-    emptySelectionCopy: 'Select rows, a full stack, or the visible result before acting in bulk.',
-    unselectVisible: 'Unselect visible',
-    selectVisible: 'Select visible',
-    clear: 'Clear',
-    moveToLater: (count) => count ? `Move ${count} to Later` : 'Move to Later',
-    newWindow: (count) => count ? `New window · ${count}` : 'New window',
-    closeSelected: (count) => count ? `Close ${count}` : 'Close selected',
-    kindRule: 'Rule',
-    kindLanding: 'Landing',
-    kindDomain: 'Domain',
-    pin: 'Pin',
-    pinned: 'Pinned',
-    pinAria: (active) => active ? 'Unpin stack' : 'Pin stack to top',
-    reorder: 'Reorder',
-    reorderHint: 'Drag to reorder stack priority',
-    selectTab: 'Select tab',
-    unselectTab: 'Unselect tab',
-    activeTab: 'Active',
-    later: 'Later',
-    close: 'Close',
-    rename: 'Rename',
-    stackTabs: (count) => `${count} tabs`,
-    duplicatesBadge: (count) => `${count} duplicates`,
-    cleanBadge: 'Clean',
-    windowBadge: (id) => `Window ${id}`,
-    selectedBadge: (count) => `${count} selected`,
-    stackOverflow: (count) => `+${count} more tabs in this stack`,
-    closeStack: 'Close stack',
-    closeDuplicates: (count) => `Close duplicates · ${count}`,
-    windowView: 'Window view',
-    windowTitle: (id) => `Window ${id}`,
-    windowTabCount: (count) => `${count} tabs`,
-    startHere: 'Start here',
-    gettingStarted: 'Getting started',
-    firstSession: 'First session',
-    scopedCleanup: 'Scoped cleanup',
-    filteredView: 'Filtered view',
-    workspaceClear: 'Workspace clear',
-    noOpenTabs: 'No open tabs',
-    guideCalloutDefault: 'Filter first. Save a checkpoint before large cleanup. Then act only on what the board is showing now.',
-    guideCalloutFirst: 'On your first cleanup, search or isolate duplicates, save one snapshot, then act in small batches.',
-    guideCalloutScoped: 'You are already in a narrowed view. Batch actions below now apply only to the tabs that remain visible.',
-    guideCalloutClear: 'The board is empty. Restore a snapshot if you want the workspace back, or keep going with a clean surface.',
-    guideDefaultPills: ['Search', 'Snapshot', 'Act'],
-    guideFirstPills: ['Scan', 'Save', 'Clean'],
-    guideScopedPills: ['Scope', 'Select', 'Resolve'],
-    guideClearPills: ['Restore', 'Rebuild', 'Continue'],
-    guideDefaultSteps: [
-      { title: 'Search or narrow first', copy: 'Use search or duplicates-only mode before you start closing tabs.' },
-      { title: 'Save a checkpoint', copy: 'Create a snapshot when the workspace matters and you may want to rewind later.' },
-      { title: 'Act on the visible scope', copy: 'Select rows or full stacks, then move or close only what stays visible.' }
-    ],
-    guideFirstSteps: [
-      { title: 'Find one clear target', copy: 'Start with a keyword, a noisy domain, or duplicate-only mode instead of the full board.' },
-      { title: 'Save your first snapshot', copy: 'One snapshot makes the first cleanup much safer because you can rebuild the session later.' },
-      { title: 'Use visible-only actions', copy: 'Select visible results or one stack at a time so every batch move stays predictable.' }
-    ],
-    guideScopedSteps: [
-      { title: 'Check the scope chips', copy: 'The control bar tells you whether search, duplicates-only mode, or recent order is active.' },
-      { title: 'Select only what you mean', copy: 'Visible selection respects your current filter and will not touch hidden stacks.' },
-      { title: 'Resolve duplicates or overflow', copy: 'Use Close duplicates, Move to Later, or Close selected once the scope looks right.' }
-    ],
-    guideClearSteps: [
-      { title: 'Restore a saved session', copy: 'Use Import snapshot if you want to rebuild a previous workspace quickly.' },
-      { title: 'Keep the board clean', copy: 'Use settings to hide background domains before the workspace fills up again.' },
-      { title: 'Use Later intentionally', copy: 'When work returns, move overflow into Later instead of letting the board sprawl again.' }
-    ],
-    snapshotsTitle: 'Workspace snapshots',
-    snapshotsIntro: 'Save a recoverable workspace version before bulk cleanup, or import one to rebuild tabs and priorities.',
-    systemTitle: 'System',
-    systemIntro: 'Keep core controls in one place before you move into snapshots and history.',
-    openSettings: 'Settings',
-    refreshBoard: 'Refresh',
-    resetView: 'Reset view',
-    exportSnapshot: 'Export snapshot',
-    importSnapshot: 'Import snapshot',
-    all: 'All',
-    noTaggedSnapshots: 'No matching snapshots yet. Create one or change the tag filter.',
-    noSnapshots: 'No snapshots yet. Export one before your first large cleanup so you can recover this workspace later.',
-    edit: 'Edit',
-    restore: 'Restore',
-    delete: 'Delete',
-    laterDock: 'Later dock',
-    laterEmpty: 'Nothing deferred. Use Later to park tabs without losing the trail.',
-    done: 'Done',
-    dismiss: 'Dismiss',
-    recentClosures: 'Recent closures',
-    recentTabCount: (count) => `${count} tabs`,
-    recentEmpty: 'Closed stacks remain here until you restore or dismiss them.',
-    archive: 'Archive',
-    archiveEmpty: 'Completed Later items land here as a lightweight history.',
-    snapshotEyebrow: 'Workspace snapshot',
-    deleteSnapshot: 'Delete snapshot',
-    cancel: 'Cancel',
-    keepIt: 'Keep it',
-    deleteConfirm: (name) => `Remove "${name}" from local snapshot storage?`,
-    deleting: 'Deleting…',
-    exportSnapshotTitle: 'Export snapshot',
-    editSnapshotTitle: 'Edit snapshot',
-    modalCopy: 'Give the workspace a name, a short note, and tags so you can find and restore it later.',
-    snapshotName: 'Name',
-    snapshotTags: 'Tags',
-    snapshotNote: 'Note',
-    snapshotNamePlaceholder: 'Workspace April review',
-    snapshotTagsPlaceholder: 'client-a, review, urgent',
-    snapshotNotePlaceholder: 'Why this version matters and what should be restored first.',
-    exporting: 'Exporting…',
-    saveSnapshot: 'Save snapshot',
-    saving: 'Saving…',
-    noVisibleResult: 'No visible result',
-    noMatchTitle: 'No tabs match the current scope',
-    noMatchCopy: 'Try a broader keyword, switch off duplicate-only mode, or clear the current filters to bring the full workspace back.',
-    showAllTabs: 'Show all tabs',
-    workspaceComplete: 'Workspace complete',
-    workspaceClearTitle: 'Workspace is clear',
-    workspaceClearCopy: 'There are no open browser tabs left to triage here. Restore a snapshot if you want to bring a saved session back.'
-  };
-}
 
 function renderBrand(): string {
-  return `
-    <div class="brand-row">
-      <span class="brand-mark" aria-hidden="true">
-        <svg viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect width="96" height="96" rx="28" fill="url(#paint0_linear)"/>
-          <path d="M23 58C30 52 35.5 49.5 41 49.5C46.7 49.5 50.4 52.6 56 52.6C61.7 52.6 66.1 49.1 73 43V57C66.1 63.1 61.6 66.4 56 66.4C50.4 66.4 46.6 63.2 41 63.2C35.2 63.2 30.3 65.7 23 72V58Z" fill="white" fill-opacity="0.97"/>
-          <path d="M32 27H41V53H32V27Z" fill="white" fill-opacity="0.92"/>
-          <path d="M55 22H64V48H55V22Z" fill="white" fill-opacity="0.92"/>
-          <defs>
-            <linearGradient id="paint0_linear" x1="12" y1="8" x2="82" y2="88" gradientUnits="userSpaceOnUse">
-              <stop stop-color="#0F4C81"/>
-              <stop offset="1" stop-color="#12B886"/>
-            </linearGradient>
-          </defs>
-        </svg>
-      </span>
-      <div>
-        <p class="eyebrow">Tab Harbor</p>
-      </div>
-    </div>
-  `;
+  return renderBrandLockup();
 }
 
 function renderPanelIcon(symbol: string, tone: 'default' | 'primary' | 'success' | 'warning' = 'default'): string {
@@ -617,7 +72,6 @@ function renderSearchToolbar(
   copy: NewtabCopy,
   state: AppState,
   summary: WorkspaceSummary,
-  canCloseAll: boolean,
   searchValue: string,
   visibleTabIds: number[]
 ): string {
@@ -626,7 +80,6 @@ function renderSearchToolbar(
   const hasSelection = visibleSelection.length > 0;
   const allVisibleSelected = visibleTabIds.length > 0 && visibleSelection.length === visibleTabIds.length;
   const hiddenSelectionCount = Math.max(0, state.selectedTabIds.length - visibleSelection.length);
-  const toolbarSignals = renderToolbarSignals(copy, state);
 
   return `
     <div class="toolbar-card">
@@ -637,11 +90,18 @@ function renderSearchToolbar(
         <div class="toolbar-selection-panel ${hasSelection ? 'active' : ''}">
           <div class="toolbar-selection-inline">
             <div class="toolbar-selection-main">
-              <strong>${escapeHtml(hasSelection ? copy.selectedSummary(visibleSelection.length) : copy.noSelectionSummary)}</strong>
-              <div class="bulk-status-row">
-                ${renderStatusChip(copy.heroOpenNow(summary.totalTabs), 'primary')}
-                ${hiddenSelectionCount ? renderStatusChip(copy.hiddenSelectionChip(hiddenSelectionCount), 'warning') : ''}
-              </div>
+              ${renderToolbarOpenPill(copy, summary.totalTabs)}
+              ${renderToolbarSelectionPill(copy, visibleSelection.length, hasSelection)}
+              <button
+                class="toggle-chip toolbar-inline-toggle ${state.duplicatesOnly ? 'active' : ''}"
+                type="button"
+                data-action="set-duplicates-only"
+                data-enabled="${state.duplicatesOnly ? 'false' : 'true'}"
+                aria-pressed="${state.duplicatesOnly ? 'true' : 'false'}"
+              >
+                ${escapeHtml(copy.duplicatesOnly)}
+              </button>
+              ${hiddenSelectionCount ? renderStatusChip(copy.hiddenSelectionChip(hiddenSelectionCount), 'warning') : ''}
             </div>
             <div class="bulk-actions">
               <button
@@ -693,15 +153,6 @@ function renderSearchToolbar(
               ${escapeHtml(copy.recent)}
             </button>
           </div>
-          <button
-            class="toggle-chip ${state.duplicatesOnly ? 'active' : ''}"
-            type="button"
-            data-action="set-duplicates-only"
-            data-enabled="${state.duplicatesOnly ? 'false' : 'true'}"
-            aria-pressed="${state.duplicatesOnly ? 'true' : 'false'}"
-          >
-            ${escapeHtml(copy.duplicatesOnly)}
-          </button>
           <div class="toggle-group" role="tablist" aria-label="Layout mode">
             <button class="toggle-pill ${state.layoutMode === 'merged' ? 'active' : ''}" type="button" data-action="set-layout-mode" data-layout-mode="merged">
               ${escapeHtml(copy.merged)}
@@ -710,15 +161,6 @@ function renderSearchToolbar(
               ${escapeHtml(copy.byWindow)}
             </button>
           </div>
-        </div>
-      </div>
-      <div class="toolbar-foot">
-        ${toolbarSignals ? `<div class="toolbar-foot-main">${toolbarSignals}</div>` : '<div></div>'}
-        <div class="toolbar-utility-row">
-          <p class="shortcut-hint">${escapeHtml(copy.shortcutHint)}</p>
-          <button class="toolbar-link-btn destructive-btn" data-action="close-all"${canCloseAll ? '' : ' disabled'}>
-            ${escapeHtml(copy.closeAllOpenTabs)}
-          </button>
         </div>
       </div>
     </div>
@@ -730,6 +172,22 @@ function renderSelectionPill(copy: NewtabCopy, selected: boolean, count?: number
   return `
     <span class="selection-pill ${selected ? 'active' : ''}">
       ${escapeHtml(base)}${typeof count === 'number' ? ` · ${count}` : ''}
+    </span>
+  `;
+}
+
+function renderToolbarSelectionPill(copy: NewtabCopy, count: number, active: boolean): string {
+  return `
+    <span class="selection-pill toolbar-selection-pill ${active ? 'active' : ''}">
+      ${escapeHtml(copy.select)} · ${count}
+    </span>
+  `;
+}
+
+function renderToolbarOpenPill(copy: NewtabCopy, count: number): string {
+  return `
+    <span class="selection-pill toolbar-selection-pill active">
+      ${escapeHtml(copy.heroOpenNow(count))}
     </span>
   `;
 }
@@ -1152,7 +610,7 @@ export function renderNewtab(
     <div class="shell ${options.liveMode ? 'is-live' : ''}">
       <main class="workspace-layout">
         <section class="board">
-          ${renderSearchToolbar(copy, state, summary, visible.groups.length > 0, searchValue, visible.visibleTabIds)}
+          ${renderSearchToolbar(copy, state, summary, searchValue, visible.visibleTabIds)}
           ${visible.groups.length
             ? renderSections(copy, visible.sections, visible.query, state.layoutMode, selectedTabIds)
             : hasQuery || state.duplicatesOnly
